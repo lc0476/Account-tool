@@ -20,6 +20,8 @@
   const modeButtons = Array.from(document.querySelectorAll(".seg-btn"));
 
   const preorderModal = document.getElementById("preorder-modal");
+  const preorderSearchInput = document.getElementById("preorder-search");
+  const preorderSearchToggle = document.getElementById("preorder-search-toggle");
   const preorderModalTitle = document.getElementById("preorder-modal-title");
   const preorderEditId = document.getElementById("preorder-edit-id");
   const openPreorderModalBtn = document.getElementById("open-preorder-modal");
@@ -35,6 +37,18 @@
   const categorySuggestions = document.getElementById("category-suggestions");
   const customerSuggestions = document.getElementById("customer-suggestions");
   const productSuggestions = document.getElementById("product-suggestions");
+
+  const preorderLockedInfo = document.getElementById("preorder-locked-info");
+  const preorderSubmitBtn = document.getElementById("preorder-submit-btn");
+  const preorderDoneBtn = document.getElementById("preorder-done-btn");
+  const preorderBatchActions = document.getElementById("preorder-batch-actions");
+  const preorderContinueActions = document.getElementById("preorder-continue-actions");
+  const saveNextCustomerBtn = document.getElementById("save-next-customer");
+  const saveNextProductBtn = document.getElementById("save-next-product");
+  const preorderFieldCategory = document.getElementById("preorder-field-category");
+  const preorderFieldCustomer = document.getElementById("preorder-field-customer");
+  const preorderFieldProduct = document.getElementById("preorder-field-product");
+  const preorderFieldPrices = document.getElementById("preorder-field-prices");
 
   const fulfillmentFilter = document.getElementById("fulfillment-filter");
   const runStatsBtn = document.getElementById("run-stats");
@@ -71,6 +85,11 @@
   const categoryNameInput = document.getElementById("category-name");
   const categoryList = document.getElementById("category-list");
   const toastEl = document.getElementById("toast");
+  const confirmModal = document.getElementById("confirm-modal");
+  const confirmMessage = document.getElementById("confirm-message");
+  const confirmInput = document.getElementById("confirm-input");
+  const confirmOkBtn = document.getElementById("confirm-ok");
+  const confirmCancelBtn = document.getElementById("confirm-cancel");
   const billingModal = document.getElementById("billing-modal");
   const billingForm = document.getElementById("billing-form");
   const billingTitle = document.getElementById("billing-title");
@@ -94,6 +113,7 @@
   const state = {
     activeTab: "preorders",
     preorderViewMode: localStorage.getItem("preorder-view-mode") || "category",
+    addMode: "single",
     billingDraft: null,
     uiLock: false,
     fulfillmentOpenState: JSON.parse(localStorage.getItem("fulfillment-open-state") || "{}"),
@@ -141,19 +161,63 @@
       .replace(/'/g, "&#39;");
   }
 
-  function showToast(message) {
+  function showToast(message, duration) {
     if (!toastEl) {
       window.alert(message);
       return;
     }
-    toastEl.textContent = String(message || "");
+    var text = String(message || "");
+    toastEl.textContent = text;
+    toastEl.classList.remove("toast-error");
+    var isError = /失败|不能|不存在|已被|无法|错误|不正确/.test(text);
+    if (isError) {
+      toastEl.classList.add("toast-error");
+    }
     toastEl.classList.add("show");
     if (toastTimer) {
       clearTimeout(toastTimer);
     }
+    var ms = duration || (isError ? 4000 : 3000);
     toastTimer = setTimeout(() => {
-      toastEl.classList.remove("show");
-    }, 2200);
+      toastEl.classList.remove("show", "toast-error");
+    }, ms);
+  }
+
+  function customConfirm(message) {
+    return new Promise((resolve) => {
+      confirmMessage.textContent = message;
+      confirmInput.style.display = "none";
+      confirmInput.value = "";
+      confirmOkBtn.textContent = "确定";
+      var onOk = () => { cleanup(); confirmModal.close(); resolve(true); };
+      var onCancel = () => { cleanup(); confirmModal.close(); resolve(false); };
+      function cleanup() {
+        confirmOkBtn.removeEventListener("click", onOk);
+        confirmCancelBtn.removeEventListener("click", onCancel);
+      }
+      confirmOkBtn.addEventListener("click", onOk);
+      confirmCancelBtn.addEventListener("click", onCancel);
+      confirmModal.showModal();
+    });
+  }
+
+  function customPrompt(message, defaultValue) {
+    return new Promise((resolve) => {
+      confirmMessage.textContent = message;
+      confirmInput.style.display = "";
+      confirmInput.value = defaultValue || "";
+      confirmOkBtn.textContent = "保存";
+      var onOk = () => { cleanup(); confirmModal.close(); resolve(confirmInput.value.trim() || null); };
+      var onCancel = () => { cleanup(); confirmModal.close(); resolve(null); };
+      function cleanup() {
+        confirmOkBtn.removeEventListener("click", onOk);
+        confirmCancelBtn.removeEventListener("click", onCancel);
+      }
+      confirmOkBtn.addEventListener("click", onOk);
+      confirmCancelBtn.addEventListener("click", onCancel);
+      confirmModal.showModal();
+      confirmInput.focus();
+    });
   }
 
   function switchTab(tab) {
@@ -237,14 +301,27 @@
   async function renderPreorders() {
     const { records } = await window.DB.getAllJoined();
     const activeRecords = records.filter((item) => !item.preorder.isBought);
-    if (!activeRecords.length) {
+    const keyword = String(preorderSearchInput.value || "").trim().toLowerCase();
+    const filtered = keyword
+      ? activeRecords.filter((item) => {
+          const customerName = (item.customer && item.customer.name) || "";
+          const productName = (item.product && item.product.name) || "";
+          const note = item.preorder.note || "";
+          return (
+            customerName.toLowerCase().includes(keyword) ||
+            productName.toLowerCase().includes(keyword) ||
+            note.toLowerCase().includes(keyword)
+          );
+        })
+      : activeRecords;
+    if (!filtered.length) {
       preorderList.className = "card-list empty-tip";
-      preorderList.textContent = "暂无预购订单，点击右下角加号开始添加。";
+      preorderList.textContent = keyword ? "未找到匹配的订单。" : "暂无预购订单，点击右下角加号开始添加。";
       return;
     }
 
     preorderList.className = "card-list";
-    const grouped = groupBy(activeRecords, (item) => {
+    const grouped = groupBy(filtered, (item) => {
       if (state.preorderViewMode === "customer") {
         return (item.customer && item.customer.name) || "未命名客户";
       }
@@ -276,9 +353,9 @@
         formatMoney(item.preorder.salePrice) +
         "</div>" +
         "<div class=\"item-actions\">" +
-        "<button class=\"mini-btn ghost-btn js-edit-preorder\" " +
+        "<button class=\"action-btn ghost-btn js-edit-preorder\" " +
         "data-id=\"" + escapeHTML(item.preorder.id) + "\">编辑</button>" +
-        "<button class=\"mini-btn ghost-btn status-bought js-toggle-bought\" " +
+        "<button class=\"action-btn ghost-btn status-bought js-toggle-bought\" " +
         "data-id=\"" + escapeHTML(item.preorder.id) + "\">买到</button>" +
         "</div>" +
         "</div>" +
@@ -358,18 +435,19 @@
         const rows = items
           .map((item) => {
             const isCompleted = item.fulfillment.isPaid && item.fulfillment.isShipped;
+            const noteHtml = item.preorder.note
+              ? "<div class=\"fulfillment-note\">" + escapeHTML(item.preorder.note) + "</div>"
+              : "";
             return (
               "<div class=\"swipe-row" + (isCompleted ? " is-completed" : "") + "\" data-swipe-dir=\"left\" data-fulfillment-id=\"" + escapeHTML(item.fulfillment.id) + "\">" +
               "<div class=\"swipe-content\">" +
               "<table class=\"fulfillment-table\"><tbody><tr>" +
               "<td class=\"fulfillment-product-name\">" +
               escapeHTML((item.product && item.product.name) || "未知商品") +
+              noteHtml +
               "</td>" +
               "<td>" +
               escapeHTML(item.preorder.quantity) +
-              "</td>" +
-              "<td class=\"fulfillment-note\">" +
-              escapeHTML(item.preorder.note || "-") +
               "</td>" +
               "<td><button class=\"ghost-btn mini-btn js-toggle-paid " +
               (item.fulfillment.isPaid ? "status-paid" : "status-unpaid") +
@@ -413,7 +491,7 @@
           escapeHTML(customerName) +
           "\">收款</button>" +
           "</summary>" +
-          "<div class=\"fulfillment-table-header\"><table class=\"fulfillment-table\"><thead><tr><th>商品</th><th>数量</th><th>备注</th><th>已付</th><th>已发</th></tr></thead></table></div>" +
+          "<div class=\"fulfillment-table-header\"><table class=\"fulfillment-table\"><thead><tr><th>商品</th><th>数量</th><th>已付</th><th>已发</th></tr></thead></table></div>" +
           "<div class=\"swipe-list\">" +
           rows +
           "</div></details>"
@@ -471,16 +549,14 @@
       return;
     }
     const shipping = numberOrZero(billingShippingFee.value);
-    let totalCost = 0;
     let totalSale = 0;
     state.billingDraft.rows.forEach((row) => {
-      totalCost += numberOrZero(row.quantity) * numberOrZero(row.costPrice);
       totalSale += numberOrZero(row.quantity) * numberOrZero(row.salePrice) + numberOrZero(row.deposit);
     });
     totalSale += shipping;
-    billingTotalCost.textContent = formatMoney(totalCost);
     billingTotalSale.textContent = formatMoney(totalSale);
-    billingTotalProfit.textContent = formatMoney(totalSale - totalCost);
+    const paid = numberOrZero(billingTotalCost.value);
+    billingTotalProfit.textContent = formatMoney(totalSale - paid);
   }
 
   function renderBillPreview() {
@@ -512,6 +588,10 @@
       formatMoney(shipping) +
       "</div><div class=\"bill-total\">总计：￥" +
       billingTotalSale.textContent +
+      "</div><div class=\"bill-extra\">已付：￥" +
+      formatMoney(numberOrZero(billingTotalCost.value)) +
+      "</div><div class=\"bill-total\">待付：￥" +
+      billingTotalProfit.textContent +
       "</div></div>";
   }
 
@@ -521,7 +601,7 @@
     }
     reportTitle.textContent = state.billingDraft.customerName + " 的账单";
     reportTotalSale.textContent = billingTotalSale.textContent;
-    reportTotalCost.textContent = billingTotalCost.textContent;
+    reportTotalCost.textContent = formatMoney(numberOrZero(billingTotalCost.value));
     reportTotalProfit.textContent = billingTotalProfit.textContent;
     reportRows.innerHTML = state.billingDraft.rows
       .map((row) => {
@@ -571,6 +651,7 @@
     };
     billingTitle.textContent = customerName + " 的账单生成";
     billingShippingFee.value = "0";
+    billingTotalCost.value = "0";
     renderBillingRows();
     recalcBillingTotals();
     renderBillPreview();
@@ -956,7 +1037,7 @@
       try {
         const text = await file.text();
         const payload = JSON.parse(text);
-        const ok = window.confirm("导入会覆盖当前本地数据，确定继续吗？");
+        const ok = await customConfirm("导入会覆盖当前本地数据，确定继续吗？");
         if (!ok) {
           importBackupFileInput.value = "";
           return;
@@ -981,6 +1062,25 @@
       });
     });
 
+    preorderSearchInput.addEventListener("input", () => {
+      renderPreorders();
+    });
+
+    preorderSearchToggle.addEventListener("click", () => {
+      preorderSearchInput.classList.toggle("search-open");
+      if (preorderSearchInput.classList.contains("search-open")) {
+        preorderSearchToggle.style.display = "none";
+        preorderSearchInput.focus();
+      }
+    });
+
+    preorderSearchInput.addEventListener("blur", () => {
+      if (!preorderSearchInput.value.trim()) {
+        preorderSearchInput.classList.remove("search-open");
+        preorderSearchToggle.style.display = "";
+      }
+    });
+
     preorderList.addEventListener("click", async (event) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) {
@@ -988,6 +1088,8 @@
       }
       if (target.classList.contains("js-toggle-bought")) {
         const id = target.dataset.id;
+        const ok = await customConfirm("确认已买到？库存将自动增加。");
+        if (!ok) return;
         try {
           await window.DB.markPreorderBought(id);
           showToast("已买到，库存已更新");
@@ -1024,6 +1126,8 @@
         preorderCostPriceInput.value = String(match.preorder.costPrice || 0);
         preorderSalePriceInput.value = String(match.preorder.salePrice || 0);
         preorderNoteInput.value = match.preorder.note || "";
+        resetAddMode();
+        preorderBatchActions.style.display = "none";
         preorderModal.showModal();
       }
     });
@@ -1035,7 +1139,54 @@
       preorderQtyInput.value = "1";
       preorderCostPriceInput.value = "0";
       preorderSalePriceInput.value = "0";
+      resetAddMode();
       preorderModal.showModal();
+    });
+
+    function resetAddMode() {
+      state.addMode = "single";
+      preorderLockedInfo.style.display = "none";
+      preorderLockedInfo.innerHTML = "";
+      preorderFieldCategory.classList.remove("field-locked");
+      preorderFieldCustomer.classList.remove("field-locked");
+      preorderFieldProduct.classList.remove("field-locked");
+      preorderFieldPrices.classList.remove("field-locked");
+      preorderBatchActions.style.display = "";
+      preorderContinueActions.style.display = "none";
+      preorderSubmitBtn.style.display = "";
+    }
+
+    function enterBatchMode(mode) {
+      state.addMode = mode;
+      preorderBatchActions.style.display = "none";
+      preorderContinueActions.style.display = "";
+      preorderSubmitBtn.style.display = "none";
+
+      if (mode === "batch-customer") {
+        preorderModalTitle.textContent = "连续添加买家";
+        var info = "<strong>锁定商品：</strong>" +
+          escapeHTML(preorderProductInput.value) +
+          " | 进价 " + escapeHTML(preorderCostPriceInput.value) +
+          " | 售价 " + escapeHTML(preorderSalePriceInput.value);
+        if (preorderCategoryInput.value) {
+          info = "<strong>分类：</strong>" + escapeHTML(preorderCategoryInput.value) + " | " + info;
+        }
+        preorderLockedInfo.innerHTML = info;
+        preorderLockedInfo.style.display = "";
+        preorderFieldCategory.classList.add("field-locked");
+        preorderFieldProduct.classList.add("field-locked");
+        preorderFieldPrices.classList.add("field-locked");
+      } else {
+        preorderModalTitle.textContent = "连续添加商品";
+        preorderLockedInfo.innerHTML = "<strong>锁定客户：</strong>" + escapeHTML(preorderCustomerInput.value);
+        preorderLockedInfo.style.display = "";
+        preorderFieldCustomer.classList.add("field-locked");
+      }
+    }
+
+    preorderDoneBtn.addEventListener("click", () => {
+      preorderModal.close();
+      state.addMode = "single";
     });
     closePreorderModalBtn.addEventListener("click", () => {
       preorderEditId.value = "";
@@ -1060,8 +1211,7 @@
       preorderSalePriceInput.value = String(numberOrZero(product.salePrice));
     });
 
-    preorderForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
+    async function savePreorderAndContinue() {
       const editId = preorderEditId.value;
       const payload = {
         categoryName: preorderCategoryInput.value,
@@ -1078,13 +1228,94 @@
         } else {
           await window.DB.createPreorderWithAutoCreate(payload);
         }
-        preorderForm.reset();
+
         preorderEditId.value = "";
+
+        if (state.addMode === "batch-customer") {
+          preorderCustomerInput.value = "";
+          preorderNoteInput.value = "";
+          preorderQtyInput.value = "1";
+          showToast("已保存，请输入下一位买家");
+          await refreshAll();
+          preorderCustomerInput.focus();
+          return;
+        }
+
+        if (state.addMode === "batch-product") {
+          preorderProductInput.value = "";
+          preorderQtyInput.value = "1";
+          preorderCostPriceInput.value = "0";
+          preorderSalePriceInput.value = "0";
+          preorderNoteInput.value = "";
+          showToast("已保存，请输入下一个商品");
+          await refreshAll();
+          preorderProductInput.focus();
+          return;
+        }
+
+        preorderForm.reset();
         preorderQtyInput.value = "1";
         preorderCostPriceInput.value = "0";
         preorderSalePriceInput.value = "0";
         preorderModal.close();
         await refreshAll();
+      } catch (error) {
+        showToast(error.message || "保存订单失败");
+      }
+    }
+
+    preorderForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await savePreorderAndContinue();
+    });
+
+    saveNextCustomerBtn.addEventListener("click", async () => {
+      if (!preorderForm.reportValidity()) return;
+      try {
+        await window.DB.createPreorderWithAutoCreate({
+          categoryName: preorderCategoryInput.value,
+          customerName: preorderCustomerInput.value,
+          productName: preorderProductInput.value,
+          quantity: Number(preorderQtyInput.value),
+          costPrice: Number(preorderCostPriceInput.value),
+          salePrice: Number(preorderSalePriceInput.value),
+          note: preorderNoteInput.value
+        });
+        enterBatchMode("batch-customer");
+        preorderEditId.value = "";
+        preorderCustomerInput.value = "";
+        preorderNoteInput.value = "";
+        preorderQtyInput.value = "1";
+        showToast("已保存，请输入下一位买家");
+        await refreshAll();
+        preorderCustomerInput.focus();
+      } catch (error) {
+        showToast(error.message || "保存订单失败");
+      }
+    });
+
+    saveNextProductBtn.addEventListener("click", async () => {
+      if (!preorderForm.reportValidity()) return;
+      try {
+        await window.DB.createPreorderWithAutoCreate({
+          categoryName: preorderCategoryInput.value,
+          customerName: preorderCustomerInput.value,
+          productName: preorderProductInput.value,
+          quantity: Number(preorderQtyInput.value),
+          costPrice: Number(preorderCostPriceInput.value),
+          salePrice: Number(preorderSalePriceInput.value),
+          note: preorderNoteInput.value
+        });
+        enterBatchMode("batch-product");
+        preorderEditId.value = "";
+        preorderProductInput.value = "";
+        preorderQtyInput.value = "1";
+        preorderCostPriceInput.value = "0";
+        preorderSalePriceInput.value = "0";
+        preorderNoteInput.value = "";
+        showToast("已保存，请输入下一个商品");
+        await refreshAll();
+        preorderProductInput.focus();
       } catch (error) {
         showToast(error.message || "保存订单失败");
       }
@@ -1200,6 +1431,11 @@
     });
 
     billingShippingFee.addEventListener("input", () => {
+      recalcBillingTotals();
+      renderBillPreview();
+    });
+
+    billingTotalCost.addEventListener("input", () => {
       recalcBillingTotals();
       renderBillPreview();
     });
@@ -1339,7 +1575,7 @@
         if (!id) {
           return;
         }
-        if (!window.confirm("确定删除该商品吗？")) {
+        if (!await customConfirm("确定删除该商品吗？")) {
           return;
         }
         try {
@@ -1378,7 +1614,7 @@
         if (!current) {
           return;
         }
-        const nextName = window.prompt("编辑客户姓名", current.name);
+        const nextName = await customPrompt("编辑客户姓名", current.name);
         if (!nextName) {
           return;
         }
@@ -1392,7 +1628,7 @@
       }
       if (target.classList.contains("js-delete-customer")) {
         event.preventDefault();
-        if (!window.confirm("确定删除该客户吗？")) {
+        if (!await customConfirm("确定删除该客户吗？")) {
           return;
         }
         try {
@@ -1430,7 +1666,7 @@
         if (!current) {
           return;
         }
-        const nextName = window.prompt("编辑分类名称", current.name);
+        const nextName = await customPrompt("编辑分类名称", current.name);
         if (!nextName) {
           return;
         }
@@ -1443,7 +1679,7 @@
         return;
       }
       if (target.classList.contains("js-delete-category")) {
-        if (!window.confirm("确定删除该分类吗？")) {
+        if (!await customConfirm("确定删除该分类吗？")) {
           return;
         }
         try {

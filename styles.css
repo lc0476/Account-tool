@@ -207,6 +207,7 @@ select {
 
 button {
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .primary-btn {
@@ -325,6 +326,9 @@ dialog {
   border-radius: 14px;
   width: calc(100vw - 2rem);
   max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 0;
 }
 
@@ -349,6 +353,63 @@ dialog::backdrop {
 
 .modal-form .row-actions {
   flex-wrap: wrap;
+}
+
+.preorder-continue-actions {
+  border-top: 1px dashed var(--border);
+  padding-top: 0.5rem;
+}
+
+.continue-btn {
+  flex: 1;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--primary-strong, #1f9a6c);
+  border-color: var(--primary, #36bf95);
+}
+
+.continue-btn:active {
+  background: var(--primary-soft);
+}
+
+.batch-btn {
+  flex: 1;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--primary-strong, #1f9a6c);
+  border-color: var(--primary, #36bf95);
+  border-style: dashed;
+}
+
+.batch-btn:active {
+  background: var(--primary-soft);
+}
+
+.preorder-batch-row {
+  border-top: 1px dashed var(--border);
+  padding-top: 0.45rem;
+}
+
+.locked-info {
+  background: var(--primary-soft, #e9f8f2);
+  border: 1px solid #c4e6d8;
+  border-radius: 10px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.8rem;
+  color: var(--primary-strong, #1f9a6c);
+  line-height: 1.5;
+}
+
+.locked-info strong {
+  font-weight: 600;
+}
+
+.field-locked input,
+.field-locked textarea,
+.field-locked select {
+  background: #f0f4f2;
+  color: var(--muted);
+  pointer-events: none;
 }
 
 details {
@@ -481,6 +542,19 @@ td {
   min-height: 1.2em;
 }
 
+.billing-summary-input {
+  width: 100%;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  border: 1px dashed var(--primary, #36bf95);
+  border-radius: 8px;
+  padding: 0.25rem 0.3rem;
+  margin-top: 0.2rem;
+  font-variant-numeric: tabular-nums;
+  background: var(--primary-soft, #e9f8f2);
+}
+
 #tab-stats.tab-panel.active {
   display: flex;
   flex-direction: column;
@@ -563,6 +637,47 @@ td {
   background: linear-gradient(180deg, #41c79d, #2eb587);
   box-shadow: 0 8px 16px rgba(54, 191, 149, 0.3);
   flex: 0 0 auto;
+}
+
+.preorder-search {
+  width: 0;
+  flex: 0 0 0;
+  min-width: 0;
+  max-width: 0;
+  padding: 0;
+  font-size: 0.82rem;
+  border: 1px solid #d3e8df;
+  border-radius: 9px;
+  background: #fff;
+  opacity: 0;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.preorder-search.search-open {
+  flex: 1 1 4rem;
+  min-width: 3rem;
+  max-width: 8rem;
+  padding: 0.42rem 0.5rem;
+  opacity: 1;
+}
+
+.search-toggle-btn {
+  flex: 0 0 auto;
+  border: 1px solid #d3e8df;
+  background: #fff;
+  border-radius: 9px;
+  width: 2.2rem;
+  height: 2.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  padding: 0;
+}
+
+.search-toggle-btn:active {
+  transform: scale(0.92);
 }
 
 .preorders-toolbar .fab-icon {
@@ -1014,7 +1129,39 @@ button.mini-btn.status-bought:hover {
 .item-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 0.5rem;
   margin-top: 0.4rem;
+}
+
+.action-btn {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  min-height: 2.2rem;
+}
+
+.confirm-modal {
+  width: min(85vw, 320px);
+}
+
+.confirm-form {
+  gap: 0.7rem;
+  text-align: center;
+}
+
+.confirm-form p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.confirm-actions {
+  justify-content: center;
+}
+
+.confirm-actions .ghost-btn,
+.confirm-actions .primary-btn {
+  flex: 1;
 }
 
 dialog {
@@ -1041,6 +1188,10 @@ dialog {
 .toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+.toast.toast-error {
+  background: rgba(180, 50, 50, 0.93);
 }
 
 .two-cols {
@@ -1087,9 +1238,11 @@ dialog {
 }
 
 .fulfillment-note {
-  font-size: 0.71rem;
+  font-size: 0.68rem;
   color: var(--muted);
   word-break: break-word;
+  margin-top: 0.15rem;
+  line-height: 1.3;
 }
 
 .billing-modal-form {
@@ -1180,24 +1333,19 @@ body.ui-lock .report-table {
 
 body.ui-lock .fulfillment-table th:nth-child(1),
 body.ui-lock .fulfillment-table td:nth-child(1) {
-  width: 34%;
+  width: 44%;
 }
 
 body.ui-lock .fulfillment-table th:nth-child(2),
 body.ui-lock .fulfillment-table td:nth-child(2) {
-  width: 11%;
+  width: 14%;
 }
 
 body.ui-lock .fulfillment-table th:nth-child(3),
-body.ui-lock .fulfillment-table td:nth-child(3) {
-  width: 31%;
-}
-
+body.ui-lock .fulfillment-table td:nth-child(3),
 body.ui-lock .fulfillment-table th:nth-child(4),
-body.ui-lock .fulfillment-table td:nth-child(4),
-body.ui-lock .fulfillment-table th:nth-child(5),
-body.ui-lock .fulfillment-table td:nth-child(5) {
-  width: 12%;
+body.ui-lock .fulfillment-table td:nth-child(4) {
+  width: 21%;
 }
 
 .report-modal {
@@ -1463,6 +1611,41 @@ body {
 }
 
 .primary-btn:active {
+  transform: translateY(1px);
+  opacity: 0.85;
+}
+
+.ghost-btn:active {
+  transform: translateY(1px);
+  background: #f0f7f4;
+  opacity: 0.85;
+}
+
+.icon-btn:active {
+  transform: scale(0.92);
+  opacity: 0.8;
+}
+
+.nav-btn:active {
+  transform: scale(0.95);
+  opacity: 0.8;
+}
+
+.side-nav-btn:active {
+  background: var(--primary-soft);
+}
+
+.mini-btn:active {
+  transform: scale(0.93);
+  opacity: 0.85;
+}
+
+.seg-btn:active {
+  opacity: 0.8;
+}
+
+.batch-btn:active {
+  background: var(--primary-soft);
   transform: translateY(1px);
 }
 

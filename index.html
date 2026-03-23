@@ -54,6 +54,8 @@
               <button class="seg-btn active" id="mode-by-category" data-mode="category">按商品分类</button>
               <button class="seg-btn" id="mode-by-customer" data-mode="customer">按买家分类</button>
             </div>
+            <input id="preorder-search" type="search" class="preorder-search" placeholder="搜索" />
+            <button id="preorder-search-toggle" class="search-toggle-btn" type="button" aria-label="搜索">🔍</button>
             <button id="open-preorder-modal" class="fab" aria-label="新增预购订单">
               <span class="fab-icon" aria-hidden="true"></span>
             </button>
@@ -66,6 +68,7 @@
             <select id="fulfillment-filter">
               <option value="all">全部</option>
               <option value="pending">未完成</option>
+              <option value="done">已完成</option>
             </select>
           </div>
           <div id="fulfillment-list" class="card-list empty-tip">暂无收款发货记录。</div>
@@ -133,17 +136,18 @@
       <form method="dialog" class="modal-form" id="preorder-form">
         <input type="hidden" id="preorder-edit-id" value="" />
         <h3 id="preorder-modal-title">新增预购订单</h3>
-        <label>
+        <div id="preorder-locked-info" class="locked-info" style="display:none"></div>
+        <label id="preorder-field-category">
           分类
           <input id="preorder-category" type="text" list="category-suggestions" />
           <datalist id="category-suggestions"></datalist>
         </label>
-        <label>
+        <label id="preorder-field-customer">
           客户
           <input id="preorder-customer" type="text" list="customer-suggestions" required />
           <datalist id="customer-suggestions"></datalist>
         </label>
-        <label>
+        <label id="preorder-field-product">
           商品
           <input id="preorder-product" type="text" list="product-suggestions" required />
           <datalist id="product-suggestions"></datalist>
@@ -152,7 +156,7 @@
           数量
           <input id="preorder-quantity" type="number" min="1" step="1" value="1" required />
         </label>
-        <div class="two-cols">
+        <div class="two-cols" id="preorder-field-prices">
           <label>
             商品进价
             <input id="preorder-cost-price" type="number" min="0" step="0.01" value="0" required />
@@ -166,9 +170,17 @@
           备注
           <textarea id="preorder-note" rows="3" placeholder="可选"></textarea>
         </label>
-        <div class="row-actions">
+        <div class="row-actions preorder-actions">
           <button value="cancel" type="button" id="close-preorder-modal" class="ghost-btn">取消</button>
-          <button type="submit" class="primary-btn">保存订单</button>
+          <button type="submit" id="preorder-submit-btn" class="primary-btn">保存订单</button>
+        </div>
+        <div id="preorder-batch-actions" class="row-actions preorder-batch-row">
+          <button type="button" id="save-next-customer" class="ghost-btn batch-btn">保存并换买家</button>
+          <button type="button" id="save-next-product" class="ghost-btn batch-btn">保存并换商品</button>
+        </div>
+        <div id="preorder-continue-actions" class="row-actions" style="display:none">
+          <button type="button" id="preorder-done-btn" class="ghost-btn">完成</button>
+          <button type="submit" id="preorder-continue-btn" class="primary-btn">保存并继续</button>
         </div>
       </form>
     </dialog>
@@ -197,15 +209,15 @@
         </label>
         <div class="summary-grid">
           <div class="summary-card">
-            <span>总成本</span>
-            <strong id="billing-total-cost">0.00</strong>
-          </div>
-          <div class="summary-card">
             <span>总售价</span>
             <strong id="billing-total-sale">0.00</strong>
           </div>
           <div class="summary-card">
-            <span>总利润</span>
+            <span>已付</span>
+            <input id="billing-total-cost" type="number" min="0" step="0.01" value="0" class="billing-summary-input" />
+          </div>
+          <div class="summary-card">
+            <span>待付</span>
             <strong id="billing-total-profit">0.00</strong>
           </div>
         </div>
@@ -274,15 +286,15 @@
         </div>
         <div class="report-top">
           <div>
-            <div class="report-label">账单总额（￥）</div>
+            <div class="report-label">总售价（￥）</div>
             <div id="report-total-sale" class="report-number">0.00</div>
           </div>
           <div>
-            <div class="report-label">总成本（￥）</div>
+            <div class="report-label">已付（￥）</div>
             <div id="report-total-cost" class="report-number">0.00</div>
           </div>
           <div>
-            <div class="report-label">总利润（￥）</div>
+            <div class="report-label">待付（￥）</div>
             <div id="report-total-profit" class="report-number">0.00</div>
           </div>
         </div>
@@ -307,6 +319,17 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <dialog id="confirm-modal" class="confirm-modal">
+      <div class="modal-form confirm-form">
+        <p id="confirm-message"></p>
+        <input id="confirm-input" type="text" style="display:none" />
+        <div class="row-actions confirm-actions">
+          <button type="button" id="confirm-cancel" class="ghost-btn">取消</button>
+          <button type="button" id="confirm-ok" class="primary-btn">确定</button>
+        </div>
+      </div>
+    </dialog>
 
     <script src="./db.js"></script>
     <script src="./app.js"></script>
