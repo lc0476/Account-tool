@@ -262,7 +262,7 @@
       return {
         product: existing,
         existed: true,
-        priceChanged: beforeCost !== (Number(existing.costPrice) || 0) || beforeSale !== (Number(existing.salePrice) || 0)
+        costChanged: beforeCost !== (Number(existing.costPrice) || 0)
       };
     }
     const now = nowISO();
@@ -282,33 +282,45 @@
       return {
         product,
         existed: false,
-        priceChanged: false
+        costChanged: false
       };
     });
   }
 
   async function upsertBatchForProduct(product, qty) {
-    const batchName = todayBatchName();
-    const batchKey = product.id + "__" + batchName;
+    const baseName = todayBatchName();
     const quantity = Number(qty) || 0;
+    const costPrice = Number(product.costPrice) || 0;
     const now = nowISO();
     return withTransaction(["productBatches"], "readwrite", async (stores) => {
-      const existing = await requestToPromise(stores.productBatches.index("batchKey").get(batchKey));
-      if (existing) {
-        existing.stock = Number(existing.stock) + quantity;
-        existing.costPrice = Number(product.costPrice) || 0;
-        existing.salePrice = Number(product.salePrice) || 0;
-        existing.updatedAt = now;
-        stores.productBatches.put(existing);
-        return existing;
+      // 查找今天同商品的所有批次
+      const allBatches = await requestToPromise(stores.productBatches.index("productId").getAll(product.id));
+      const todayBatches = allBatches.filter(function (b) { return b.batchName.startsWith(baseName); });
+
+      // 找进价相同的今天批次
+      const sameCostBatch = todayBatches.find(function (b) { return (Number(b.costPrice) || 0) === costPrice; });
+      if (sameCostBatch) {
+        sameCostBatch.stock = Number(sameCostBatch.stock) + quantity;
+        sameCostBatch.salePrice = Number(product.salePrice) || 0;
+        sameCostBatch.updatedAt = now;
+        stores.productBatches.put(sameCostBatch);
+        return sameCostBatch;
       }
+
+      // 进价不同，创建新批次，名称加序号
+      var batchName = baseName;
+      if (todayBatches.length > 0) {
+        batchName = baseName + "-" + (todayBatches.length + 1);
+      }
+      var batchKey = product.id + "__" + batchName;
+
       const batch = {
         id: uid(),
         productId: product.id,
-        batchName,
-        batchKey,
+        batchName: batchName,
+        batchKey: batchKey,
         stock: quantity,
-        costPrice: Number(product.costPrice) || 0,
+        costPrice: costPrice,
         salePrice: Number(product.salePrice) || 0,
         createdAt: now,
         updatedAt: now
@@ -392,7 +404,7 @@
     const deposit = Number(input.deposit);
 
     let batch = null;
-    if (productResult.existed && productResult.priceChanged) {
+    if (productResult.existed && productResult.costChanged) {
       batch = await upsertBatchForProduct(product, quantity);
     }
 
@@ -744,9 +756,11 @@
           continue;
         }
         preorder.quantity = Number(row.quantity) || preorder.quantity;
-        preorder.costPrice = Number(row.costPrice) || 0;
         preorder.salePrice = Number(row.salePrice) || 0;
         preorder.deposit = Number(row.deposit) || 0;
+        if (row.batchId) {
+          preorder.batchId = row.batchId;
+        }
         preorder.note = String(preorder.note || "");
         preorder.updatedAt = now;
         stores.preorders.put(preorder);
@@ -895,6 +909,18 @@
 
   async function listPurchaseHistory() {
     return getAll("purchaseHistory");
+  }
+
+  async function removePurchaseHistory(id) {
+    return withTransaction(["purchaseHistory"], "readwrite", async (stores) => {
+      stores.purchaseHistory.delete(id);
+    });
+  }
+
+  async function removeBatch(id) {
+    return withTransaction(["productBatches"], "readwrite", async (stores) => {
+      stores.productBatches.delete(id);
+    });
   }
 
   async function exportAllData() {
@@ -1056,6 +1082,10 @@
     listCustomers: () => getAll("customers"),
     listProducts: () => getAll("products"),
     listProductBatches: () => getAll("productBatches"),
+    getProductBatchesWithStock: async function (productId) {
+      var all = await getAll("productBatches");
+      return all.filter(function (b) { return b.productId === productId && Number(b.stock) > 0; });
+    },
     getProductByName,
     addOrUpdateProductBatch,
     saveCategory,
@@ -1066,6 +1096,8 @@
     removeProduct,
     getPurchaseHistoryByCustomer,
     listPurchaseHistory,
+    removePurchaseHistory,
+    removeBatch,
     exportAllData,
     importAllData,
     saveAutoBackup,

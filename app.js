@@ -26,6 +26,7 @@
   const preorderModal = document.getElementById("preorder-modal");
   const preorderSearchInput = document.getElementById("preorder-search");
   const preorderSearchToggle = document.getElementById("preorder-search-toggle");
+  const preorderSortSelect = document.getElementById("preorder-sort");
   const preorderModalTitle = document.getElementById("preorder-modal-title");
   const preorderEditId = document.getElementById("preorder-edit-id");
   const openPreorderModalBtn = document.getElementById("open-preorder-modal");
@@ -54,8 +55,12 @@
   const preorderFieldCustomer = document.getElementById("preorder-field-customer");
   const preorderFieldProduct = document.getElementById("preorder-field-product");
   const preorderFieldPrices = document.getElementById("preorder-field-prices");
+  const batchPriceList = document.getElementById("batch-price-list");
 
   const fulfillmentFilter = document.getElementById("fulfillment-filter");
+  const fulfillmentSearchInput = document.getElementById("fulfillment-search");
+  const fulfillmentSearchToggle = document.getElementById("fulfillment-search-toggle");
+  const fulfillmentSortSelect = document.getElementById("fulfillment-sort");
   const runStatsBtn = document.getElementById("run-stats");
 
   const productForm = document.getElementById("product-form");
@@ -64,6 +69,9 @@
   const openProductModalBtn = document.getElementById("open-product-modal");
   const closeProductModalBtn = document.getElementById("close-product-modal");
   const productIdInput = document.getElementById("product-id");
+  const productBatchIdInput = document.getElementById("product-batch-id");
+  const productBatchField = document.getElementById("product-batch-field");
+  const productBatchSelect = document.getElementById("product-batch-select");
   const productNameInput = document.getElementById("product-name");
   const productCategorySelect = document.getElementById("product-category");
   const productStockInput = document.getElementById("product-stock");
@@ -427,7 +435,14 @@
       );
     }
 
+    var sortMode = preorderSortSelect.value;
+    function sortEntries(a, b) {
+      if (sortMode === "count") return b[1].length - a[1].length;
+      return a[0].localeCompare(b[0], "zh-CN");
+    }
+
     const html = Array.from(grouped.entries())
+      .sort(sortEntries)
       .map(([groupName, items]) => {
         let linesHTML = "";
         if (state.preorderViewMode !== "customer") {
@@ -435,6 +450,7 @@
             (item.product && item.product.name) || "未知商品"
           );
           linesHTML = Array.from(subGrouped.entries())
+            .sort(sortEntries)
             .map(([productName, subItems]) => {
               const totalQty = subItems.reduce((s, i) => s + (Number(i.preorder.quantity) || 0), 0);
               const subLines = subItems.map(renderPreorderItem).join("");
@@ -476,9 +492,20 @@
     if (filter === "done") {
       list = list.filter((item) => item.fulfillment.isPaid && item.fulfillment.isShipped);
     }
+    const fKeyword = String(fulfillmentSearchInput.value || "").trim().toLowerCase();
+    if (fKeyword) {
+      list = list.filter((item) => {
+        const customerName = (item.customer && item.customer.name) || "";
+        const productName = (item.product && item.product.name) || "";
+        const note = item.preorder.note || "";
+        return customerName.toLowerCase().includes(fKeyword) ||
+          productName.toLowerCase().includes(fKeyword) ||
+          note.toLowerCase().includes(fKeyword);
+      });
+    }
     if (!list.length) {
       fulfillmentList.className = "card-list empty-tip";
-      fulfillmentList.textContent = "暂无收款发货记录。";
+      fulfillmentList.textContent = fKeyword ? "未找到匹配的记录。" : "暂无收款发货记录。";
       return;
     }
     fulfillmentList.className = "card-list";
@@ -486,7 +513,14 @@
       list,
       (item) => (item.customer && item.customer.id) || ((item.customer && item.customer.name) || "未知客户")
     );
+    var fSortMode = fulfillmentSortSelect.value;
     const html = Array.from(grouped.entries())
+      .sort(function (a, b) {
+        var nameA = (a[1][0].customer && a[1][0].customer.name) || "";
+        var nameB = (b[1][0].customer && b[1][0].customer.name) || "";
+        if (fSortMode === "count") return b[1].length - a[1].length;
+        return nameA.localeCompare(nameB, "zh-CN");
+      })
       .map(([groupKey, items]) => {
         const customerName = (items[0].customer && items[0].customer.name) || "未知客户";
         const isOpen = getOpenState(state.fulfillmentOpenState, groupKey, true);
@@ -581,6 +615,19 @@
           "\" type=\"number\" min=\"1\" step=\"1\" value=\"" +
           escapeHTML(row.quantity) +
           "\" /></td>" +
+          "<td>" + (row.batches && row.batches.length
+            ? "<select class=\"billing-input js-billing-batch\" data-id=\"" + escapeHTML(row.preorderId) + "\">" +
+              "<option value=\"\">-</option>" +
+              row.batches.map(function (b, idx) {
+                return "<option value=\"" + escapeHTML(b.id) + "\"" +
+                  " data-cost=\"" + escapeHTML(b.costPrice) + "\"" +
+                  " data-sale=\"" + escapeHTML(b.salePrice) + "\"" +
+                  (b.id === row.batchId ? " selected" : "") +
+                  ">" + (idx + 1) + "</option>";
+              }).join("") +
+              "</select>"
+            : "<span class=\"billing-input-text\">-</span>") +
+          "</td>" +
           "<td><input class=\"billing-input js-billing-cost\" data-id=\"" +
           escapeHTML(row.preorderId) +
           "\" type=\"number\" min=\"0\" step=\"0.01\" value=\"" +
@@ -600,7 +647,7 @@
           escapeHTML(row.preorderId) +
           "\" type=\"checkbox\" " +
           (row.isPaid ? "checked" : "") +
-          " />已付</label></td>" +
+          " />尾款</label></td>" +
           "</tr>"
         );
       })
@@ -613,13 +660,15 @@
     }
     const shipping = numberOrZero(billingShippingFee.value);
     let totalSale = 0;
+    let totalDeposit = 0;
     state.billingDraft.rows.forEach((row) => {
-      totalSale += numberOrZero(row.quantity) * numberOrZero(row.salePrice) + numberOrZero(row.deposit);
+      totalSale += numberOrZero(row.quantity) * numberOrZero(row.salePrice);
+      totalDeposit += numberOrZero(row.deposit);
     });
     totalSale += shipping;
     billingTotalSale.textContent = formatMoney(totalSale);
-    const paid = numberOrZero(billingTotalCost.value);
-    billingTotalProfit.textContent = formatMoney(totalSale - paid);
+    billingTotalCost.value = formatMoney(totalDeposit);
+    billingTotalProfit.textContent = formatMoney(totalSale - totalDeposit);
   }
 
   function renderBillPreview() {
@@ -630,7 +679,7 @@
     const shipping = numberOrZero(billingShippingFee.value);
     const rowsHtml = state.billingDraft.rows
       .map((row) => {
-        const rowSale = numberOrZero(row.quantity) * numberOrZero(row.salePrice) + numberOrZero(row.deposit);
+        const rowSale = numberOrZero(row.quantity) * numberOrZero(row.salePrice);
         return (
           "<li><span>" +
           escapeHTML(row.productName) +
@@ -651,7 +700,7 @@
       formatMoney(shipping) +
       "</div><div class=\"bill-total\">总计：￥" +
       billingTotalSale.textContent +
-      "</div><div class=\"bill-extra\">已付：￥" +
+      "</div><div class=\"bill-extra\">已付定金：￥" +
       formatMoney(numberOrZero(billingTotalCost.value)) +
       "</div><div class=\"bill-total\">待付：￥" +
       billingTotalProfit.textContent +
@@ -694,17 +743,27 @@
 
   async function openBillingModal(customerId, customerName) {
     const { records } = await window.DB.getAllJoined();
+    const allBatches = await window.DB.listProductBatches();
+    const batchByProduct = new Map();
+    allBatches.forEach(function (b) {
+      if (!batchByProduct.has(b.productId)) batchByProduct.set(b.productId, []);
+      batchByProduct.get(b.productId).push(b);
+    });
+
     const targetRows = records
       .filter((item) => item.customer && item.customer.id === customerId && item.fulfillment)
       .map((item) => ({
         preorderId: item.preorder.id,
         fulfillmentId: item.fulfillment.id,
+        productId: item.preorder.productId,
         productName: (item.product && item.product.name) || "未知商品",
         quantity: Number(item.preorder.quantity) || 1,
         costPrice: numberOrZero(item.preorder.costPrice || (item.product && item.product.costPrice)),
         salePrice: numberOrZero(item.preorder.salePrice || (item.product && item.product.salePrice)),
         deposit: numberOrZero(item.preorder.deposit),
-        isPaid: !!item.fulfillment.isPaid
+        batchId: item.preorder.batchId || "",
+        isPaid: !!item.fulfillment.isPaid,
+        batches: (batchByProduct.get(item.preorder.productId) || []).filter(function (b) { return Number(b.stock) > 0; }).sort(function (a, b) { return a.createdAt.localeCompare(b.createdAt); })
       }));
 
     state.billingDraft = {
@@ -799,11 +858,14 @@
 
   function resetProductForm() {
     productIdInput.value = "";
+    productBatchIdInput.value = "";
     productNameInput.value = "";
     productCategorySelect.value = "";
     productStockInput.value = "0";
     productCostInput.value = "0";
     productSaleInput.value = "0";
+    productBatchField.style.display = "none";
+    productBatchSelect.innerHTML = "";
   }
 
   function openProductModal() {
@@ -851,44 +913,60 @@
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .map((item) => {
         const categoryName = categoryMap.get(item.categoryId) || "未分类";
-        const batchText = (batchByProduct.get(item.id) || [])
-          .sort((a, b) => b.batchName.localeCompare(a.batchName))
-          .map((batch) => batch.batchName + "(库存" + batch.stock + ")")
-          .join("，");
+        const productBatches = (batchByProduct.get(item.id) || [])
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        var displayCost = item.costPrice;
+        var displaySale = item.salePrice;
+        if (productBatches.length > 1) {
+          displayCost = productBatches[0].costPrice;
+          displaySale = productBatches[0].salePrice;
+        }
+        const batchListHTML = productBatches.length
+          ? productBatches.map(function (b, idx) {
+              var batchLabel = (idx + 1) + ", " + b.batchName;
+              return (
+                "<div class=\"swipe-row\" data-swipe-dir=\"left\">" +
+                "<div class=\"swipe-content\">" +
+                "<div class=\"batch-item\">" +
+                "<div class=\"batch-item-main\">" +
+                "<span class=\"batch-item-name\">" + escapeHTML(batchLabel) + "</span>" +
+                "<span class=\"batch-item-stock\">库存 " + escapeHTML(b.stock) + "</span>" +
+                "</div>" +
+                "<div class=\"batch-item-meta\">" +
+                "进价 " + formatMoney(b.costPrice) +
+                " | 售价 " + formatMoney(b.salePrice) +
+                "</div></div></div>" +
+                "<div class=\"swipe-action swipe-action-right js-delete-batch\" data-id=\"" +
+                escapeHTML(b.id) + "\">删除</div>" +
+                "</div>"
+              );
+            }).join("")
+          : "<div class=\"item-meta\">暂无批次</div>";
         return (
-          "<div class=\"item-card\">" +
-          "<div class=\"line\"><strong>" +
-          escapeHTML(item.name) +
-          "</strong><small>" +
-          escapeHTML(categoryName) +
-          "</small></div>" +
-          "<div class=\"item-meta\">库存：" +
-          escapeHTML(item.stock) +
-          " | 进价：" +
-          formatMoney(item.costPrice) +
-          " | 售价：" +
-          formatMoney(item.salePrice) +
-          "</div>" +
-          "<div class=\"item-meta\">批次：" +
-          escapeHTML(batchText || "暂无批次") +
-          "</div>" +
-          "<div class=\"row-actions\">" +
-          "<button class=\"ghost-btn js-add-batch\" data-id=\"" +
-          escapeHTML(item.id) +
-          "\" data-name=\"" +
-          escapeHTML(item.name) +
-          "\" data-cost=\"" +
-          escapeHTML(item.costPrice) +
-          "\" data-sale=\"" +
-          escapeHTML(item.salePrice) +
+          "<div class=\"swipe-row\" data-swipe-dir=\"left\">" +
+          "<div class=\"swipe-content\">" +
+          "<details class=\"manage-card\"" + (productBatches.length ? " open" : "") + ">" +
+          "<summary class=\"manage-summary\">" +
+          "<span class=\"manage-name\">" + escapeHTML(item.name) +
+          " <small>" + escapeHTML(categoryName) + "</small></span>" +
+          "<div class=\"manage-summary-actions\">" +
+          "<button class=\"ghost-btn mini-btn js-add-batch\" data-id=\"" +
+          escapeHTML(item.id) + "\" data-name=\"" + escapeHTML(item.name) +
+          "\" data-cost=\"" + escapeHTML(item.costPrice) +
+          "\" data-sale=\"" + escapeHTML(item.salePrice) +
           "\">加批次</button>" +
-          "<button class=\"ghost-btn js-edit-product\" data-id=\"" +
-          escapeHTML(item.id) +
-          "\">编辑</button>" +
-          "<button class=\"ghost-btn danger js-delete-product\" data-id=\"" +
-          escapeHTML(item.id) +
-          "\">删除</button>" +
+          "<button class=\"ghost-btn mini-btn js-edit-product\" data-id=\"" +
+          escapeHTML(item.id) + "\">编辑</button>" +
+          "</div></summary>" +
+          "<div class=\"manage-body\">" +
+          "<div class=\"manage-info\">库存 " + escapeHTML(item.stock) +
+          " | 进价 " + formatMoney(displayCost) +
+          " | 售价 " + formatMoney(displaySale) + "</div>" +
+          "<div class=\"batch-list\">" + batchListHTML + "</div>" +
+          "</div></details>" +
           "</div>" +
+          "<div class=\"swipe-action swipe-action-right js-delete-product\" data-id=\"" +
+          escapeHTML(item.id) + "\">删除</div>" +
           "</div>"
         );
       })
@@ -927,13 +1005,18 @@
             "<div class=\"ph-list\">" +
             history.map((h) => {
               return (
+                "<div class=\"swipe-row\" data-swipe-dir=\"left\">" +
+                "<div class=\"swipe-content\">" +
                 "<div class=\"ph-item\">" +
                 "<div class=\"ph-main\">" +
                 "<span class=\"ph-name\">" + escapeHTML(h.productName) + "</span>" +
                 "<span class=\"ph-qty\">×" + escapeHTML(h.quantity) + "</span>" +
                 "</div>" +
                 (h.note ? "<div class=\"ph-note\">" + escapeHTML(h.note) + "</div>" : "") +
-                "<div class=\"ph-time\">" + escapeHTML(formatDateTime(h.shippedAt)) + "</div>" +
+                "<div class=\"ph-time\">" + escapeHTML(formatDateTime(h.shippedAt)) + " | 单价：" + formatMoney(h.salePrice) + "</div>" +
+                "</div>" +
+                "</div>" +
+                "<div class=\"swipe-action swipe-action-right js-delete-history\" data-id=\"" + escapeHTML(h.id) + "\">删除</div>" +
                 "</div>"
               );
             }).join("") +
@@ -941,23 +1024,26 @@
           : "<div class=\"purchase-history\"><div class=\"ph-empty\">暂无购买记录</div></div>";
 
         return (
-          "<details class=\"customer-card\">" +
-          "<summary class=\"customer-summary\">" +
-          "<span class=\"customer-name\">" +
+          "<div class=\"swipe-row\" data-swipe-dir=\"left\">" +
+          "<div class=\"swipe-content\">" +
+          "<details class=\"manage-card\"" + (history.length ? " open" : "") + ">" +
+          "<summary class=\"manage-summary\">" +
+          "<span class=\"manage-name\">" +
           escapeHTML(item.name) +
           (history.length ? " <small class=\"ph-badge\">" + history.length + "单</small>" : "") +
           "</span>" +
-          "<div class=\"row-actions\">" +
-          "<button class=\"ghost-btn js-edit-customer\" data-id=\"" +
+          "<div class=\"manage-summary-actions\">" +
+          "<button class=\"ghost-btn mini-btn js-edit-customer\" data-id=\"" +
           escapeHTML(item.id) +
           "\">编辑</button>" +
-          "<button class=\"ghost-btn danger js-delete-customer\" data-id=\"" +
-          escapeHTML(item.id) +
-          "\">删除</button>" +
+          "</div></summary>" +
+          "<div class=\"manage-body\">" + historyHTML + "</div>" +
+          "</details>" +
           "</div>" +
-          "</summary>" +
-          historyHTML +
-          "</details>"
+          "<div class=\"swipe-action swipe-action-right js-delete-customer\" data-id=\"" +
+          escapeHTML(item.id) +
+          "\">删除</div>" +
+          "</div>"
         );
       })
       .join("");
@@ -987,6 +1073,8 @@
           ? categoryProducts
               .map((product) => {
                 return (
+                  "<div class=\"swipe-row\" data-swipe-dir=\"left\">" +
+                  "<div class=\"swipe-content\">" +
                   "<div class=\"category-product-row\">" +
                   "<span>" +
                   escapeHTML(product.name) +
@@ -998,34 +1086,41 @@
                   " | 售价 " +
                   formatMoney(product.salePrice) +
                   "</small>" +
+                  "</div></div>" +
+                  "<div class=\"swipe-action swipe-action-right js-delete-cat-product\" data-id=\"" +
+                  escapeHTML(product.id) + "\">删除</div>" +
                   "</div>"
                 );
               })
               .join("")
           : "<div class=\"item-meta\">该分类下暂无商品</div>";
         return (
-          "<details class=\"category-details\" data-group=\"" +
+          "<div class=\"swipe-row\" data-swipe-dir=\"left\">" +
+          "<div class=\"swipe-content\">" +
+          "<details class=\"manage-card\" data-group=\"" +
           escapeHTML(item.id) +
           "\" " +
           (getOpenState(state.categoryOpenState, item.id, true) ? "open" : "") +
           ">" +
-          "<summary>" +
+          "<summary class=\"manage-summary\">" +
+          "<span class=\"manage-name\">" +
           escapeHTML(item.name) +
-          "（" +
-          categoryProducts.length +
-          "）</summary>" +
-          "<div class=\"category-products\">" +
-          productsHTML +
-          "</div>" +
-          "<div class=\"row-actions\">" +
-          "<button class=\"ghost-btn js-edit-category\" data-id=\"" +
+          "（" + categoryProducts.length + "）</span>" +
+          "<div class=\"manage-summary-actions\">" +
+          "<button class=\"ghost-btn mini-btn js-edit-category\" data-id=\"" +
           escapeHTML(item.id) +
           "\">编辑</button>" +
-          "<button class=\"ghost-btn danger js-delete-category\" data-id=\"" +
-          escapeHTML(item.id) +
-          "\">删除</button>" +
+          "</div></summary>" +
+          "<div class=\"manage-body\">" +
+          "<div class=\"category-products\">" +
+          productsHTML +
+          "</div></div>" +
+          "</details>" +
           "</div>" +
-          "</details>"
+          "<div class=\"swipe-action swipe-action-right js-delete-category\" data-id=\"" +
+          escapeHTML(item.id) +
+          "\">删除</div>" +
+          "</div>"
         );
       })
       .join("");
@@ -1164,6 +1259,10 @@
       renderPreorders();
     });
 
+    preorderSortSelect.addEventListener("change", () => {
+      renderPreorders();
+    });
+
     preorderSearchToggle.addEventListener("click", () => {
       preorderSearchInput.classList.toggle("search-open");
       if (preorderSearchInput.classList.contains("search-open")) {
@@ -1200,6 +1299,7 @@
       if (target.classList.contains("js-delete-preorder")) {
         const id = target.dataset.id;
         if (!id) return;
+        if (!await customConfirm("确定删除该预购订单吗？")) return;
         try {
           await window.DB.deletePreorder(id);
           showToast("已删除");
@@ -1328,6 +1428,66 @@
       preorderSalePriceInput.value = String(numberOrZero(product.salePrice));
     });
 
+    // 进价输入框 — 点击时显示有库存的批次价格
+    var batchPicking = false;
+
+    preorderCostPriceInput.addEventListener("focus", async function () {
+      var productName = preorderProductInput.value.trim();
+      if (!productName) {
+        batchPriceList.classList.remove("open");
+        batchPriceList.innerHTML = "";
+        return;
+      }
+      var product = await window.DB.getProductByName(productName);
+      if (!product) {
+        batchPriceList.classList.remove("open");
+        batchPriceList.innerHTML = "";
+        return;
+      }
+      var batches = await window.DB.getProductBatchesWithStock(product.id);
+      if (!batches.length) {
+        batchPriceList.classList.remove("open");
+        batchPriceList.innerHTML = "";
+        return;
+      }
+      batchPriceList.innerHTML = batches.map(function (b, idx) {
+        return "<div class=\"ac-item batch-price-item\" data-cost=\"" + escapeHTML(b.costPrice) +
+          "\" data-sale=\"" + escapeHTML(b.salePrice) + "\">" +
+          "<span>" + (idx + 1) + ", " + escapeHTML(b.batchName) + "</span>" +
+          "<span>进价 " + formatMoney(b.costPrice) + " | 库存 " + escapeHTML(b.stock) + "</span>" +
+          "</div>";
+      }).join("");
+      batchPriceList.classList.add("open");
+    });
+
+    batchPriceList.addEventListener("touchstart", function () {
+      batchPicking = true;
+    }, { passive: true });
+
+    batchPriceList.addEventListener("mousedown", function (e) {
+      batchPicking = true;
+      e.preventDefault();
+    });
+
+    batchPriceList.addEventListener("click", function (e) {
+      batchPicking = false;
+      var item = e.target.closest(".batch-price-item");
+      if (!item) return;
+      preorderCostPriceInput.value = item.dataset.cost;
+      preorderSalePriceInput.value = item.dataset.sale;
+      batchPriceList.classList.remove("open");
+      batchPriceList.innerHTML = "";
+    });
+
+    preorderCostPriceInput.addEventListener("blur", function () {
+      setTimeout(function () {
+        if (!batchPicking) {
+          batchPriceList.classList.remove("open");
+        }
+        batchPicking = false;
+      }, 200);
+    });
+
     async function savePreorderAndContinue() {
       const editId = preorderEditId.value;
       const payload = {
@@ -1447,6 +1607,29 @@
     });
 
     fulfillmentFilter.addEventListener("change", renderFulfillments);
+
+    fulfillmentSearchInput.addEventListener("input", () => {
+      renderFulfillments();
+    });
+
+    fulfillmentSortSelect.addEventListener("change", () => {
+      renderFulfillments();
+    });
+
+    fulfillmentSearchToggle.addEventListener("click", () => {
+      fulfillmentSearchInput.classList.toggle("search-open");
+      if (fulfillmentSearchInput.classList.contains("search-open")) {
+        fulfillmentSearchToggle.style.display = "none";
+        fulfillmentSearchInput.focus();
+      }
+    });
+
+    fulfillmentSearchInput.addEventListener("blur", () => {
+      if (!fulfillmentSearchInput.value.trim()) {
+        fulfillmentSearchInput.classList.remove("search-open");
+        fulfillmentSearchToggle.style.display = "";
+      }
+    });
     fulfillmentList.addEventListener("toggle", (event) => {
       const target = event.target;
       if (!(target instanceof HTMLDetailsElement)) {
@@ -1505,6 +1688,7 @@
         if (!id) {
           return;
         }
+        if (!await customConfirm("确定删除该收款发货记录吗？")) return;
         try {
           await window.DB.removeFulfillmentItem(id);
           showToast("已删除");
@@ -1520,7 +1704,7 @@
       if (!(target instanceof HTMLDetailsElement)) {
         return;
       }
-      if (!target.classList.contains("category-details")) {
+      if (!target.classList.contains("category-details") && !target.dataset.group) {
         return;
       }
       setOpenState("category", target.dataset.group || "", target.open);
@@ -1555,22 +1739,51 @@
       renderBillPreview();
     });
 
+    billingRows.addEventListener("change", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || !state.billingDraft) return;
+      if (!target.classList.contains("js-billing-batch")) return;
+      const preorderId = target.dataset.id;
+      const row = state.billingDraft.rows.find((item) => item.preorderId === preorderId);
+      if (!row) return;
+      const opt = target.selectedOptions[0];
+      if (opt && opt.value) {
+        row.batchId = opt.value;
+        row.costPrice = numberOrZero(opt.dataset.cost);
+        row.salePrice = numberOrZero(opt.dataset.sale);
+      } else {
+        row.batchId = "";
+      }
+      // 更新进价和售价输入框
+      var costInput = billingRows.querySelector(".js-billing-cost[data-id=\"" + preorderId + "\"]");
+      if (costInput) costInput.value = row.costPrice;
+      var saleInput = billingRows.querySelector(".js-billing-sale[data-id=\"" + preorderId + "\"]");
+      if (saleInput) saleInput.value = row.salePrice;
+      recalcBillingTotals();
+      renderBillPreview();
+    });
+
     billingShippingFee.addEventListener("input", () => {
       recalcBillingTotals();
       renderBillPreview();
     });
 
-    billingTotalCost.addEventListener("input", () => {
-      recalcBillingTotals();
-      renderBillPreview();
-    });
-
-    generateBillingBtn.addEventListener("click", () => {
-      renderBillPreview();
+    generateBillingBtn.addEventListener("click", async () => {
       if (!state.billingDraft) {
         return;
       }
-      renderReportPage();
+      try {
+        await window.DB.saveCustomerBilling(state.billingDraft.customerId, {
+          rows: state.billingDraft.rows,
+          shippingFee: numberOrZero(billingShippingFee.value)
+        });
+        renderBillPreview();
+        renderReportPage();
+        await Promise.all([renderFulfillments(), renderStats(), renderPreorders()]);
+        showToast("账单数据已保存");
+      } catch (error) {
+        showToast(error.message || "保存账单失败");
+      }
     });
 
     closeBillingModalBtn.addEventListener("click", () => {
@@ -1591,29 +1804,22 @@
       event.preventDefault();
     });
 
-    billingForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      if (!state.billingDraft) {
-        return;
-      }
-      try {
-        await window.DB.saveCustomerBilling(state.billingDraft.customerId, {
-          rows: state.billingDraft.rows,
-          shippingFee: numberOrZero(billingShippingFee.value)
-        });
-        billingModal.close();
-        await Promise.all([renderFulfillments(), renderStats(), renderPreorders()]);
-        showToast("账单数据已保存");
-      } catch (error) {
-        showToast(error.message || "保存账单失败");
-      }
-    });
-
     runStatsBtn.addEventListener("click", renderStats);
 
     productForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       try {
+        var batchId = productBatchIdInput.value;
+        if (batchId) {
+          // 编辑的是批次
+          await window.DB.addOrUpdateProductBatch({
+            productId: productIdInput.value,
+            batchName: productBatchSelect.selectedOptions[0].textContent.split("（")[0],
+            stockDelta: 0,
+            costPrice: Number(productCostInput.value),
+            salePrice: Number(productSaleInput.value)
+          });
+        }
         await window.DB.saveProduct({
           id: productIdInput.value || "",
           name: productNameInput.value,
@@ -1631,6 +1837,30 @@
     });
 
     productResetBtn.addEventListener("click", resetProductForm);
+
+    productBatchSelect.addEventListener("change", function () {
+      var opt = productBatchSelect.selectedOptions[0];
+      if (!opt || !opt.value) {
+        // "商品默认" selected — restore product values
+        var pid = productIdInput.value;
+        if (pid) {
+          window.DB.listProducts().then(function (products) {
+            var p = products.find(function (x) { return x.id === pid; });
+            if (p) {
+              productStockInput.value = String(p.stock || 0);
+              productCostInput.value = String(p.costPrice || 0);
+              productSaleInput.value = String(p.salePrice || 0);
+              productBatchIdInput.value = "";
+            }
+          });
+        }
+        return;
+      }
+      productBatchIdInput.value = opt.value;
+      productStockInput.value = opt.dataset.stock || "0";
+      productCostInput.value = opt.dataset.cost || "0";
+      productSaleInput.value = opt.dataset.sale || "0";
+    });
     openProductModalBtn.addEventListener("click", () => {
       resetProductForm();
       openProductModal();
@@ -1686,11 +1916,33 @@
           return;
         }
         productIdInput.value = item.id;
+        productBatchIdInput.value = "";
         productNameInput.value = item.name;
         productCategorySelect.value = item.categoryId || "";
         productStockInput.value = String(item.stock || 0);
         productCostInput.value = String(item.costPrice || 0);
         productSaleInput.value = String(item.salePrice || 0);
+
+        // 加载批次下拉
+        var batches = await window.DB.getProductBatchesWithStock(item.id);
+        if (batches.length > 0) {
+          batches.sort(function (a, b) { return a.createdAt.localeCompare(b.createdAt); });
+          productBatchSelect.innerHTML =
+            "<option value=\"\">商品默认</option>" +
+            batches.map(function (b) {
+              return "<option value=\"" + escapeHTML(b.id) +
+                "\" data-stock=\"" + escapeHTML(b.stock) +
+                "\" data-cost=\"" + escapeHTML(b.costPrice) +
+                "\" data-sale=\"" + escapeHTML(b.salePrice) +
+                "\">" + escapeHTML(b.batchName) +
+                "（库存" + escapeHTML(b.stock) + "）</option>";
+            }).join("");
+          productBatchField.style.display = "";
+        } else {
+          productBatchField.style.display = "none";
+          productBatchSelect.innerHTML = "";
+        }
+
         switchTab("products");
         openProductModal();
         return;
@@ -1708,6 +1960,19 @@
           await Promise.all([renderProducts(), renderPreorders(), renderStats()]);
         } catch (error) {
           showToast(error.message || "删除商品失败");
+        }
+        return;
+      }
+      if (target.classList.contains("js-delete-batch")) {
+        const id = target.dataset.id;
+        if (!id) return;
+        if (!await customConfirm("确定删除该批次吗？")) return;
+        try {
+          await window.DB.removeBatch(id);
+          await renderProducts();
+          showToast("批次已删除");
+        } catch (error) {
+          showToast(error.message || "删除批次失败");
         }
       }
     });
@@ -1762,6 +2027,20 @@
         } catch (error) {
           showToast(error.message || "删除客户失败");
         }
+        return;
+      }
+      if (target.classList.contains("js-delete-history")) {
+        event.preventDefault();
+        if (!await customConfirm("确定删除该购买记录吗？")) {
+          return;
+        }
+        try {
+          await window.DB.removePurchaseHistory(id);
+          await renderCustomers();
+          showToast("购买记录已删除");
+        } catch (error) {
+          showToast(error.message || "删除失败");
+        }
       }
     });
 
@@ -1813,16 +2092,31 @@
         } catch (error) {
           showToast(error.message || "删除分类失败");
         }
+        return;
+      }
+      if (target.classList.contains("js-delete-cat-product")) {
+        if (!await customConfirm("确定删除该商品吗？")) return;
+        try {
+          await window.DB.removeProduct(id);
+          await Promise.all([renderCategories(), renderProducts(), renderPreorders(), renderStats()]);
+          showToast("商品已删除");
+        } catch (error) {
+          showToast(error.message || "删除商品失败");
+        }
       }
     });
   }
 
   (function initSwipeGestures() {
     let startX = 0;
+    let startY = 0;
     let currentRow = null;
     let swipeDir = null;
-    const THRESHOLD = 50;
+    let locked = false;
+    let isHorizontal = null;
+    const THRESHOLD = 60;
     const DISTANCE = 70;
+    const ANGLE_LOCK = 12;
 
     function closeAllSwiped(except) {
       document.querySelectorAll(".swipe-row.swiped-left, .swipe-row.swiped-right").forEach((el) => {
@@ -1836,16 +2130,33 @@
       const row = e.target.closest(".swipe-row");
       if (!row) return;
       startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
       currentRow = row;
       swipeDir = row.dataset.swipeDir || "left";
-      currentRow.classList.add("swiping");
+      locked = false;
+      isHorizontal = null;
     }
 
     function onTouchMove(e) {
       if (!currentRow) return;
+      var dx = e.touches[0].clientX - startX;
+      var dy = e.touches[0].clientY - startY;
+
+      if (isHorizontal === null) {
+        if (Math.abs(dx) < ANGLE_LOCK && Math.abs(dy) < ANGLE_LOCK) return;
+        isHorizontal = Math.abs(dx) > Math.abs(dy) * 1.5;
+        if (isHorizontal) {
+          currentRow.classList.add("swiping");
+        }
+      }
+
+      if (!isHorizontal) {
+        currentRow = null;
+        return;
+      }
+
       const content = currentRow.querySelector(".swipe-content");
       if (!content) return;
-      const dx = e.touches[0].clientX - startX;
       const isOpen = currentRow.classList.contains("swiped-left") || currentRow.classList.contains("swiped-right");
 
       if (swipeDir === "left") {
@@ -1877,19 +2188,21 @@
       content.style.transform = "";
       currentRow.classList.remove("swiping");
 
-      if (swipeDir === "left") {
-        if (!isOpen && dx < -THRESHOLD) {
-          closeAllSwiped(currentRow);
-          currentRow.classList.add("swiped", "swiped-left");
-        } else if (isOpen && dx > THRESHOLD) {
-          currentRow.classList.remove("swiped", "swiped-left");
-        }
-      } else {
-        if (!isOpen && dx > THRESHOLD) {
-          closeAllSwiped(currentRow);
-          currentRow.classList.add("swiped", "swiped-right");
-        } else if (isOpen && dx < -THRESHOLD) {
-          currentRow.classList.remove("swiped", "swiped-right");
+      if (isHorizontal) {
+        if (swipeDir === "left") {
+          if (!isOpen && dx < -THRESHOLD) {
+            closeAllSwiped(currentRow);
+            currentRow.classList.add("swiped", "swiped-left");
+          } else if (isOpen && dx > THRESHOLD) {
+            currentRow.classList.remove("swiped", "swiped-left");
+          }
+        } else {
+          if (!isOpen && dx > THRESHOLD) {
+            closeAllSwiped(currentRow);
+            currentRow.classList.add("swiped", "swiped-right");
+          } else if (isOpen && dx < -THRESHOLD) {
+            currentRow.classList.remove("swiped", "swiped-right");
+          }
         }
       }
       currentRow = null;
