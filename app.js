@@ -9,6 +9,10 @@
   const menuMask = document.getElementById("menu-mask");
   const exportBackupBtn = document.getElementById("export-backup-btn");
   const importBackupFileInput = document.getElementById("import-backup-file");
+  const syncKeyInput = document.getElementById("sync-key-input");
+  const saveSyncKeyBtn = document.getElementById("save-sync-key");
+  const cloudUploadBtn = document.getElementById("cloud-upload-btn");
+  const cloudDownloadBtn = document.getElementById("cloud-download-btn");
   const preorderList = document.getElementById("preorder-list");
   const fulfillmentList = document.getElementById("fulfillment-list");
   const statsWrap = document.getElementById("stats-table-wrap");
@@ -34,6 +38,7 @@
   const preorderCostPriceInput = document.getElementById("preorder-cost-price");
   const preorderSalePriceInput = document.getElementById("preorder-sale-price");
   const preorderNoteInput = document.getElementById("preorder-note");
+  const preorderDepositInput = document.getElementById("preorder-deposit");
   const categorySuggestions = document.getElementById("category-suggestions");
   const customerSuggestions = document.getElementById("customer-suggestions");
   const productSuggestions = document.getElementById("product-suggestions");
@@ -289,13 +294,73 @@
     return map;
   }
 
-  function fillDatalist(element, names) {
-    element.innerHTML = names.map((name) => "<option value=\"" + escapeHTML(name) + "\"></option>").join("");
+  function renderAcList(listEl, names, keyword) {
+    if (!names.length) {
+      listEl.classList.remove("open");
+      listEl.innerHTML = "";
+      return;
+    }
+    var kw = (keyword || "").toLowerCase();
+    listEl.innerHTML = names.map(function (name) {
+      var display = escapeHTML(name);
+      if (kw) {
+        var idx = name.toLowerCase().indexOf(kw);
+        if (idx >= 0) {
+          display = escapeHTML(name.slice(0, idx)) +
+            "<mark>" + escapeHTML(name.slice(idx, idx + kw.length)) + "</mark>" +
+            escapeHTML(name.slice(idx + kw.length));
+        }
+      }
+      return "<div class=\"ac-item\" data-value=\"" + escapeHTML(name) + "\">" + display + "</div>";
+    }).join("");
+    listEl.classList.add("open");
   }
 
-  async function onSuggest(inputEl, searchMethod, targetList) {
-    const names = await searchMethod(inputEl.value.trim());
-    fillDatalist(targetList, names);
+  function setupAutocomplete(inputEl, listEl, searchMethod, onSelect) {
+    var debounceTimer = null;
+    var picking = false;
+    inputEl.addEventListener("input", function () {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(async function () {
+        var kw = inputEl.value.trim();
+        if (!kw) {
+          listEl.classList.remove("open");
+          listEl.innerHTML = "";
+          return;
+        }
+        var names = await searchMethod(kw);
+        renderAcList(listEl, names, kw);
+      }, 120);
+    });
+    inputEl.addEventListener("focus", function () {
+      if (inputEl.value.trim() && listEl.children.length) {
+        listEl.classList.add("open");
+      }
+    });
+    listEl.addEventListener("touchstart", function (e) {
+      picking = true;
+    }, { passive: true });
+    listEl.addEventListener("mousedown", function (e) {
+      picking = true;
+      e.preventDefault();
+    });
+    listEl.addEventListener("click", function (e) {
+      picking = false;
+      var item = e.target.closest(".ac-item");
+      if (!item) return;
+      inputEl.value = item.dataset.value;
+      listEl.classList.remove("open");
+      listEl.innerHTML = "";
+      if (onSelect) onSelect(item.dataset.value);
+    });
+    inputEl.addEventListener("blur", function () {
+      setTimeout(function () {
+        if (!picking) {
+          listEl.classList.remove("open");
+        }
+        picking = false;
+      }, 200);
+    });
   }
 
   async function renderPreorders() {
@@ -330,34 +395,30 @@
 
     function renderPreorderItem(item) {
       const isCustomerMode = state.preorderViewMode === "customer";
+      const priceInfo = "进" + formatMoney(item.preorder.costPrice) + " 售" + formatMoney(item.preorder.salePrice);
+      const noteHtml = item.preorder.note
+        ? " <span class=\"item-note-inline\">(" + escapeHTML(item.preorder.note) + ")</span>"
+        : "";
       return (
         "<div class=\"swipe-row\" data-swipe-dir=\"left\" data-preorder-id=\"" + escapeHTML(item.preorder.id) + "\">" +
         "<div class=\"swipe-content\">" +
         "<div class=\"item-card\" data-preorder-id=\"" + escapeHTML(item.preorder.id) + "\">" +
+        "<div class=\"item-row-main\">" +
         (isCustomerMode
-          ? "<div class=\"line\"><strong>" +
+          ? "<div class=\"item-left\"><strong>" +
             escapeHTML((item.product && item.product.name) || "未知商品") +
-            "</strong><span>×" +
-            escapeHTML(item.preorder.quantity) +
-            "</span></div>"
-          : "<div class=\"item-sub-line\">" +
-            "<span>客户：" + escapeHTML((item.customer && item.customer.name) || "未知客户") + "</span>" +
-            "<span>×" + escapeHTML(item.preorder.quantity) + "</span>" +
-            "</div>") +
-        (item.preorder.note
-          ? "<div class=\"item-meta\">备注：" + escapeHTML(item.preorder.note) + "</div>"
-          : "") +
-        "<div class=\"item-meta\">进价：" +
-        formatMoney(item.preorder.costPrice) +
-        " | 售价：" +
-        formatMoney(item.preorder.salePrice) +
-        "</div>" +
-        "<div class=\"item-actions\">" +
-        "<button class=\"action-btn ghost-btn js-edit-preorder\" " +
-        "data-id=\"" + escapeHTML(item.preorder.id) + "\">编辑</button>" +
-        "<button class=\"action-btn ghost-btn status-bought js-toggle-bought\" " +
-        "data-id=\"" + escapeHTML(item.preorder.id) + "\">买到</button>" +
-        "</div>" +
+            "</strong> <span class=\"item-qty\">×" + escapeHTML(item.preorder.quantity) + "</span>" +
+            noteHtml + "</div>"
+          : "<div class=\"item-left\"><span>" +
+            escapeHTML((item.customer && item.customer.name) || "未知客户") +
+            "</span> <span class=\"item-qty\">×" + escapeHTML(item.preorder.quantity) + "</span>" +
+            noteHtml + "</div>") +
+        "<div class=\"item-right\">" +
+        "<span class=\"item-price\">" + escapeHTML(priceInfo) + "</span>" +
+        "<div class=\"item-actions-inline\">" +
+        "<button class=\"mini-btn ghost-btn js-edit-preorder\" data-id=\"" + escapeHTML(item.preorder.id) + "\">编辑</button>" +
+        "<button class=\"mini-btn ghost-btn status-bought js-toggle-bought\" data-id=\"" + escapeHTML(item.preorder.id) + "\">买到</button>" +
+        "</div></div></div>" +
         "</div>" +
         "</div>" +
         "<div class=\"swipe-action swipe-action-right js-delete-preorder\" data-id=\"" + escapeHTML(item.preorder.id) + "\">删除</div>" +
@@ -377,13 +438,13 @@
               const totalQty = subItems.reduce((s, i) => s + (Number(i.preorder.quantity) || 0), 0);
               const subLines = subItems.map(renderPreorderItem).join("");
               return (
-                "<div class=\"product-subgroup\">" +
-                "<div class=\"product-subgroup-title\">" +
+                "<details class=\"product-subgroup\" open>" +
+                "<summary class=\"product-subgroup-title\">" +
                 escapeHTML(productName) +
                 " <span class=\"product-subgroup-qty\">共 " + totalQty + " 件</span>" +
-                "</div>" +
-                subLines +
-                "</div>"
+                "</summary>" +
+                "<div class=\"product-subgroup-body\">" + subLines + "</div>" +
+                "</details>"
               );
             })
             .join("");
@@ -391,11 +452,12 @@
           linesHTML = items.map(renderPreorderItem).join("");
         }
         return (
-          "<div class=\"group-card\"><h3 class=\"group-title\">" +
+          "<details class=\"group-card\" open><summary class=\"group-title\">" +
           escapeHTML(groupName) +
-          "</h3>" +
-          linesHTML +
-          "</div>"
+          " <span class=\"group-count\">(" + items.length + ")</span>" +
+          "</summary>" +
+          "<div class=\"group-body\">" + linesHTML + "</div>" +
+          "</details>"
         );
       })
       .join("");
@@ -976,6 +1038,10 @@
     if (state.uiLock) {
       window.scrollTo(0, scrollY);
     }
+    window.DB.saveAutoBackup();
+    if (window.DB.getSyncKey()) {
+      window.DB.cloudUpload().catch(function () {});
+    }
   }
 
   function updateModeButtons() {
@@ -1053,6 +1119,40 @@
       }
     });
 
+    syncKeyInput.value = window.DB.getSyncKey();
+
+    saveSyncKeyBtn.addEventListener("click", () => {
+      var key = syncKeyInput.value.trim();
+      if (key.length < 4) {
+        showToast("同步密钥不能少于4位");
+        return;
+      }
+      window.DB.setSyncKey(key);
+      showToast("同步密钥已保存");
+    });
+
+    cloudUploadBtn.addEventListener("click", async () => {
+      try {
+        await window.DB.cloudUpload();
+        showToast("数据已上传到云端");
+      } catch (error) {
+        showToast(error.message || "上传失败");
+      }
+    });
+
+    cloudDownloadBtn.addEventListener("click", async () => {
+      try {
+        var payload = await window.DB.cloudDownload();
+        var ok = await customConfirm("从云端恢复会覆盖本地数据，确定继续吗？");
+        if (!ok) return;
+        await window.DB.importAllData(payload);
+        await refreshAll();
+        showToast("已从云端恢复数据");
+      } catch (error) {
+        showToast(error.message || "恢复失败");
+      }
+    });
+
     modeButtons.forEach((btn) => {
       btn.addEventListener("click", async () => {
         state.preorderViewMode = btn.dataset.mode;
@@ -1125,6 +1225,7 @@
         preorderQtyInput.value = String(match.preorder.quantity || 1);
         preorderCostPriceInput.value = String(match.preorder.costPrice || 0);
         preorderSalePriceInput.value = String(match.preorder.salePrice || 0);
+        preorderDepositInput.value = String(match.preorder.deposit || 0);
         preorderNoteInput.value = match.preorder.note || "";
         resetAddMode();
         preorderBatchActions.style.display = "none";
@@ -1139,6 +1240,7 @@
       preorderQtyInput.value = "1";
       preorderCostPriceInput.value = "0";
       preorderSalePriceInput.value = "0";
+      preorderDepositInput.value = "0";
       resetAddMode();
       preorderModal.showModal();
     });
@@ -1193,15 +1295,14 @@
       preorderModal.close();
     });
 
-    preorderCategoryInput.addEventListener("input", () =>
-      onSuggest(preorderCategoryInput, window.DB.searchCategoryNames, categorySuggestions)
-    );
-    preorderCustomerInput.addEventListener("input", () =>
-      onSuggest(preorderCustomerInput, window.DB.searchCustomerNames, customerSuggestions)
-    );
-    preorderProductInput.addEventListener("input", () =>
-      onSuggest(preorderProductInput, window.DB.searchProductNames, productSuggestions)
-    );
+    setupAutocomplete(preorderCategoryInput, categorySuggestions, window.DB.searchCategoryNames);
+    setupAutocomplete(preorderCustomerInput, customerSuggestions, window.DB.searchCustomerNames);
+    setupAutocomplete(preorderProductInput, productSuggestions, window.DB.searchProductNames, async function (name) {
+      var product = await window.DB.getProductByName(name);
+      if (!product) return;
+      preorderCostPriceInput.value = String(numberOrZero(product.costPrice));
+      preorderSalePriceInput.value = String(numberOrZero(product.salePrice));
+    });
     preorderProductInput.addEventListener("change", async () => {
       const product = await window.DB.getProductByName(preorderProductInput.value.trim());
       if (!product) {
@@ -1220,6 +1321,7 @@
         quantity: Number(preorderQtyInput.value),
         costPrice: Number(preorderCostPriceInput.value),
         salePrice: Number(preorderSalePriceInput.value),
+        deposit: Number(preorderDepositInput.value),
         note: preorderNoteInput.value
       };
       try {
@@ -1234,6 +1336,7 @@
         if (state.addMode === "batch-customer") {
           preorderCustomerInput.value = "";
           preorderNoteInput.value = "";
+          preorderDepositInput.value = "0";
           preorderQtyInput.value = "1";
           showToast("已保存，请输入下一位买家");
           await refreshAll();
@@ -1246,6 +1349,7 @@
           preorderQtyInput.value = "1";
           preorderCostPriceInput.value = "0";
           preorderSalePriceInput.value = "0";
+          preorderDepositInput.value = "0";
           preorderNoteInput.value = "";
           showToast("已保存，请输入下一个商品");
           await refreshAll();
@@ -1257,6 +1361,7 @@
         preorderQtyInput.value = "1";
         preorderCostPriceInput.value = "0";
         preorderSalePriceInput.value = "0";
+        preorderDepositInput.value = "0";
         preorderModal.close();
         await refreshAll();
       } catch (error) {
@@ -1279,12 +1384,14 @@
           quantity: Number(preorderQtyInput.value),
           costPrice: Number(preorderCostPriceInput.value),
           salePrice: Number(preorderSalePriceInput.value),
+          deposit: Number(preorderDepositInput.value),
           note: preorderNoteInput.value
         });
         enterBatchMode("batch-customer");
         preorderEditId.value = "";
         preorderCustomerInput.value = "";
         preorderNoteInput.value = "";
+        preorderDepositInput.value = "0";
         preorderQtyInput.value = "1";
         showToast("已保存，请输入下一位买家");
         await refreshAll();
@@ -1304,6 +1411,7 @@
           quantity: Number(preorderQtyInput.value),
           costPrice: Number(preorderCostPriceInput.value),
           salePrice: Number(preorderSalePriceInput.value),
+          deposit: Number(preorderDepositInput.value),
           note: preorderNoteInput.value
         });
         enterBatchMode("batch-product");
@@ -1312,6 +1420,7 @@
         preorderQtyInput.value = "1";
         preorderCostPriceInput.value = "0";
         preorderSalePriceInput.value = "0";
+        preorderDepositInput.value = "0";
         preorderNoteInput.value = "";
         showToast("已保存，请输入下一个商品");
         await refreshAll();
@@ -1801,6 +1910,38 @@
     updateModeButtons();
     switchTab(state.activeTab);
     await window.DB.openDB();
+
+    // 请求持久化存储，防止浏览器自动清理数据
+    window.DB.requestPersistentStorage();
+
+    // 检测数据是否丢失，尝试从自动备份恢复
+    var empty = await window.DB.isDBEmpty();
+    if (empty) {
+      var backup = window.DB.getAutoBackup();
+      if (backup) {
+        var ok = await customConfirm("检测到本地数据为空，但存在自动备份（" + backup.meta.exportedAt.slice(0, 16).replace("T", " ") + "），是否恢复？");
+        if (ok) {
+          try {
+            await window.DB.importAllData(backup);
+            showToast("数据已从自动备份恢复");
+          } catch (e) {
+            showToast("恢复失败：" + (e.message || "未知错误"));
+          }
+        }
+      } else if (window.DB.getSyncKey()) {
+        try {
+          var cloudData = await window.DB.cloudDownload();
+          var okCloud = await customConfirm("本地数据为空，检测到云端备份，是否恢复？");
+          if (okCloud) {
+            await window.DB.importAllData(cloudData);
+            showToast("数据已从云端恢复");
+          }
+        } catch (e) {
+          // 云端也没有数据，忽略
+        }
+      }
+    }
+
     await refreshAll();
     await registerServiceWorker();
   }

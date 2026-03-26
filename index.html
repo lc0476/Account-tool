@@ -44,6 +44,18 @@
         <button id="export-backup-btn" class="side-nav-btn">导出本地备份</button>
         <label class="side-nav-btn side-file-btn" for="import-backup-file">导入备份文件</label>
         <input id="import-backup-file" type="file" accept=".json,application/json" hidden />
+        <div class="side-menu-divider"></div>
+        <div class="side-sync-section">
+          <label class="side-sync-label">云端同步密钥</label>
+          <div class="side-sync-row">
+            <input id="sync-key-input" type="text" placeholder="建议使用手机号后六位" class="sync-key-input" />
+            <button id="save-sync-key" class="ghost-btn mini-btn">保存</button>
+          </div>
+          <div class="side-sync-actions">
+            <button id="cloud-upload-btn" class="side-nav-btn">上传到云端</button>
+            <button id="cloud-download-btn" class="side-nav-btn">从云端恢复</button>
+          </div>
+        </div>
         <p class="side-menu-tip">建议固定同一个线上域名访问，并定期导出备份。</p>
       </aside>
 
@@ -137,20 +149,20 @@
         <input type="hidden" id="preorder-edit-id" value="" />
         <h3 id="preorder-modal-title">新增预购订单</h3>
         <div id="preorder-locked-info" class="locked-info" style="display:none"></div>
-        <label id="preorder-field-category">
+        <label id="preorder-field-category" class="ac-wrap">
           分类
-          <input id="preorder-category" type="text" list="category-suggestions" />
-          <datalist id="category-suggestions"></datalist>
+          <input id="preorder-category" type="text" autocomplete="off" />
+          <div id="category-suggestions" class="ac-list"></div>
         </label>
-        <label id="preorder-field-customer">
+        <label id="preorder-field-customer" class="ac-wrap">
           客户
-          <input id="preorder-customer" type="text" list="customer-suggestions" required />
-          <datalist id="customer-suggestions"></datalist>
+          <input id="preorder-customer" type="text" autocomplete="off" required />
+          <div id="customer-suggestions" class="ac-list"></div>
         </label>
-        <label id="preorder-field-product">
+        <label id="preorder-field-product" class="ac-wrap">
           商品
-          <input id="preorder-product" type="text" list="product-suggestions" required />
-          <datalist id="product-suggestions"></datalist>
+          <input id="preorder-product" type="text" autocomplete="off" required />
+          <div id="product-suggestions" class="ac-list"></div>
         </label>
         <label>
           数量
@@ -166,6 +178,10 @@
             <input id="preorder-sale-price" type="number" min="0" step="0.01" value="0" required />
           </label>
         </div>
+        <label id="preorder-field-deposit">
+          定金
+          <input id="preorder-deposit" type="number" min="0" step="0.01" value="0" />
+        </label>
         <label>
           备注
           <textarea id="preorder-note" rows="3" placeholder="可选"></textarea>

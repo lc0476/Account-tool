@@ -619,6 +619,7 @@
       record.quantity = Number(input.quantity) || record.quantity;
       record.costPrice = Number(input.costPrice) || 0;
       record.salePrice = Number(input.salePrice) || 0;
+      record.deposit = Number(input.deposit) || 0;
       record.note = String(input.note || "").trim();
       record.updatedAt = now;
       stores.preorders.put(record);
@@ -913,6 +914,86 @@
     });
   }
 
+  var BACKUP_KEY = "daigou-auto-backup";
+  var SYNC_KEY_STORAGE = "daigou-sync-key";
+  var CLOUD_URL = "https://daigou-backup.charlie0476.workers.dev";
+
+  function getSyncKey() {
+    return (localStorage.getItem(SYNC_KEY_STORAGE) || "").trim();
+  }
+
+  function setSyncKey(key) {
+    localStorage.setItem(SYNC_KEY_STORAGE, (key || "").trim());
+  }
+
+  async function cloudUpload() {
+    var syncKey = getSyncKey();
+    if (!syncKey || syncKey.length < 4) {
+      throw new Error("请先设置4位以上的同步密钥");
+    }
+    var payload = await exportAllData();
+    var resp = await fetch(CLOUD_URL, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Sync-Key": syncKey },
+      body: JSON.stringify(payload)
+    });
+    var result = await resp.json();
+    if (!resp.ok) throw new Error(result.error || "上传失败");
+    return result;
+  }
+
+  async function cloudDownload() {
+    var syncKey = getSyncKey();
+    if (!syncKey || syncKey.length < 4) {
+      throw new Error("请先设置4位以上的同步密钥");
+    }
+    var resp = await fetch(CLOUD_URL, {
+      method: "GET",
+      headers: { "X-Sync-Key": syncKey }
+    });
+    if (!resp.ok) {
+      var err = await resp.json().catch(function () { return {}; });
+      throw new Error(err.error || "下载失败");
+    }
+    return resp.json();
+  }
+
+  async function saveAutoBackup() {
+    try {
+      var payload = await exportAllData();
+      localStorage.setItem(BACKUP_KEY, JSON.stringify(payload));
+    } catch (e) {
+      // silently fail — localStorage might be full
+    }
+  }
+
+  function getAutoBackup() {
+    try {
+      var raw = localStorage.getItem(BACKUP_KEY);
+      if (!raw) return null;
+      var payload = JSON.parse(raw);
+      if (payload && payload.data && payload.meta) return payload;
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function isDBEmpty() {
+    var counts = await Promise.all(STORE_NAMES.map(function (name) {
+      return getAll(name).then(function (rows) { return rows.length; });
+    }));
+    return counts.every(function (c) { return c === 0; });
+  }
+
+  async function requestPersistentStorage() {
+    if (navigator.storage && navigator.storage.persist) {
+      var granted = await navigator.storage.persist();
+      return granted;
+    }
+    return false;
+  }
+
   window.DB = {
     openDB,
     getAllJoined,
@@ -944,6 +1025,14 @@
     getPurchaseHistoryByCustomer,
     listPurchaseHistory,
     exportAllData,
-    importAllData
+    importAllData,
+    saveAutoBackup,
+    getAutoBackup,
+    isDBEmpty,
+    requestPersistentStorage,
+    getSyncKey,
+    setSyncKey,
+    cloudUpload,
+    cloudDownload
   };
 })();

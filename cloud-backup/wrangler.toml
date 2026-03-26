@@ -1,0 +1,7 @@
+name = "daigou-backup"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "BACKUP_KV"
+id = "a1f7edc77cf74eefa366529b496f711a"
