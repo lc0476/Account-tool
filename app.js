@@ -1044,9 +1044,6 @@
       window.scrollTo(0, scrollY);
     }
     window.DB.saveAutoBackup();
-    if (window.DB.getSyncKey()) {
-      window.DB.cloudUpload().catch(function () {});
-    }
   }
 
   function updateModeButtons() {
@@ -1966,6 +1963,20 @@
     }
 
     await refreshAll();
+
+    // 每天自动云端备份一次
+    if (window.DB.getSyncKey()) {
+      var lastSync = localStorage.getItem("daigou-last-cloud-sync") || "";
+      var now = new Date();
+      var today = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+      if (lastSync !== today) {
+        window.DB.cloudUpload().then(function () {
+          localStorage.setItem("daigou-last-cloud-sync", today);
+          showToast("云端备份已自动更新");
+        }).catch(function () {});
+      }
+    }
+
     await registerServiceWorker();
   }
 

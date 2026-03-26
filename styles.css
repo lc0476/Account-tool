@@ -945,10 +945,11 @@ body.menu-open {
 }
 
 .side-menu-version {
-  margin: 0;
+  margin: auto 0 0;
   font-size: 0.68rem;
   color: #b0b8c4;
   text-align: center;
+  padding-top: 0.5rem;
 }
 
 .side-switch {
