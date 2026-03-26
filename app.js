@@ -1951,11 +1951,9 @@
       } else if (window.DB.getSyncKey()) {
         try {
           var cloudData = await window.DB.cloudDownload();
-          var okCloud = await customConfirm("本地数据为空，检测到云端备份，是否恢复？");
-          if (okCloud) {
-            await window.DB.importAllData(cloudData);
-            showToast("数据已从云端恢复");
-          }
+          showToast("正在从云端恢复数据...");
+          await window.DB.importAllData(cloudData);
+          showToast("数据已从云端自动恢复");
         } catch (e) {
           // 云端也没有数据，忽略
         }

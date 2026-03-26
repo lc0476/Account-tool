@@ -935,12 +935,36 @@
   var SYNC_KEY_STORAGE = "daigou-sync-key";
   var CLOUD_URL = "https://daigou-backup.charlie0476.workers.dev";
 
+  function setCookie(name, value, days) {
+    var expires = "";
+    if (days) {
+      var d = new Date();
+      d.setTime(d.getTime() + days * 86400000);
+      expires = "; expires=" + d.toUTCString();
+    }
+    document.cookie = name + "=" + encodeURIComponent(value) + expires + "; path=/; SameSite=Lax";
+  }
+
+  function getCookie(name) {
+    var match = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+    return match ? decodeURIComponent(match[1]) : "";
+  }
+
   function getSyncKey() {
-    return (localStorage.getItem(SYNC_KEY_STORAGE) || "").trim();
+    var key = (localStorage.getItem(SYNC_KEY_STORAGE) || "").trim();
+    if (!key) {
+      key = getCookie("daigou_sync_key");
+      if (key) {
+        localStorage.setItem(SYNC_KEY_STORAGE, key);
+      }
+    }
+    return key;
   }
 
   function setSyncKey(key) {
-    localStorage.setItem(SYNC_KEY_STORAGE, (key || "").trim());
+    var clean = (key || "").trim();
+    localStorage.setItem(SYNC_KEY_STORAGE, clean);
+    setCookie("daigou_sync_key", clean, 365);
   }
 
   async function cloudUpload() {
