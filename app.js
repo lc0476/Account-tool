@@ -319,24 +319,29 @@
   function setupAutocomplete(inputEl, listEl, searchMethod, onSelect) {
     var debounceTimer = null;
     var picking = false;
+    var suppressNextFocus = false;
+
+    async function doSearch() {
+      var kw = inputEl.value.trim();
+      var names = await searchMethod(kw);
+      renderAcList(listEl, names, kw);
+    }
+
     inputEl.addEventListener("input", function () {
       clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(async function () {
-        var kw = inputEl.value.trim();
-        if (!kw) {
-          listEl.classList.remove("open");
-          listEl.innerHTML = "";
-          return;
-        }
-        var names = await searchMethod(kw);
-        renderAcList(listEl, names, kw);
-      }, 120);
+      debounceTimer = setTimeout(doSearch, 120);
     });
     inputEl.addEventListener("focus", function () {
-      if (inputEl.value.trim() && listEl.children.length) {
-        listEl.classList.add("open");
+      if (suppressNextFocus) {
+        suppressNextFocus = false;
+        return;
       }
+      doSearch();
     });
+
+    inputEl.suppressNextFocus = function () {
+      suppressNextFocus = true;
+    };
     listEl.addEventListener("touchstart", function (e) {
       picking = true;
     }, { passive: true });
@@ -1229,7 +1234,9 @@
         preorderNoteInput.value = match.preorder.note || "";
         resetAddMode();
         preorderBatchActions.style.display = "none";
+        preorderCategoryInput.suppressNextFocus();
         preorderModal.showModal();
+        document.activeElement && document.activeElement.blur();
       }
     });
 
@@ -1242,7 +1249,9 @@
       preorderSalePriceInput.value = "0";
       preorderDepositInput.value = "0";
       resetAddMode();
+      preorderCategoryInput.suppressNextFocus();
       preorderModal.showModal();
+      document.activeElement && document.activeElement.blur();
     });
 
     function resetAddMode() {
@@ -1295,9 +1304,23 @@
       preorderModal.close();
     });
 
-    setupAutocomplete(preorderCategoryInput, categorySuggestions, window.DB.searchCategoryNames);
+    var selectedCategoryId = "";
+
+    setupAutocomplete(preorderCategoryInput, categorySuggestions, window.DB.searchCategoryNames, async function (name) {
+      var cat = await window.DB.findCategoryByName(name);
+      selectedCategoryId = cat ? cat.id : "";
+    });
+
+    preorderCategoryInput.addEventListener("input", function () {
+      if (!preorderCategoryInput.value.trim()) {
+        selectedCategoryId = "";
+      }
+    });
+
     setupAutocomplete(preorderCustomerInput, customerSuggestions, window.DB.searchCustomerNames);
-    setupAutocomplete(preorderProductInput, productSuggestions, window.DB.searchProductNames, async function (name) {
+    setupAutocomplete(preorderProductInput, productSuggestions, function (kw) {
+      return window.DB.searchProductNames(kw, selectedCategoryId);
+    }, async function (name) {
       var product = await window.DB.getProductByName(name);
       if (!product) return;
       preorderCostPriceInput.value = String(numberOrZero(product.costPrice));

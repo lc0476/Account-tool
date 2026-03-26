@@ -944,6 +944,13 @@ body.menu-open {
   padding: 0.55rem 0.4rem;
 }
 
+.side-menu-version {
+  margin: 0;
+  font-size: 0.68rem;
+  color: #b0b8c4;
+  text-align: center;
+}
+
 .side-switch {
   display: flex;
   align-items: center;

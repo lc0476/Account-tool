@@ -469,14 +469,31 @@
 
   async function searchNames(storeName, keyword) {
     const cleanKeyword = normalizeName(keyword);
-    if (!cleanKeyword) {
-      return [];
-    }
     const all = await getAll(storeName);
+    if (!cleanKeyword) {
+      return all.slice(0, 20).map((item) => item.name);
+    }
     return all
       .filter((item) => item.nameLower.includes(cleanKeyword))
-      .slice(0, 8)
+      .slice(0, 20)
       .map((item) => item.name);
+  }
+
+  async function searchProductNames(keyword, categoryId) {
+    const cleanKeyword = normalizeName(keyword);
+    const all = await getAll("products");
+    var filtered = all;
+    if (categoryId) {
+      filtered = filtered.filter((item) => item.categoryId === categoryId);
+    }
+    if (cleanKeyword) {
+      filtered = filtered.filter((item) => item.nameLower.includes(cleanKeyword));
+    }
+    return filtered.slice(0, 20).map((item) => item.name);
+  }
+
+  async function findCategoryByName(name) {
+    return findByName("categories", name);
   }
 
   async function adjustBatchStockForShipment(stores, preorder, shippedNext) {
@@ -1009,7 +1026,8 @@
     saveCustomerBilling,
     searchCategoryNames: (keyword) => searchNames("categories", keyword),
     searchCustomerNames: (keyword) => searchNames("customers", keyword),
-    searchProductNames: (keyword) => searchNames("products", keyword),
+    searchProductNames: (keyword, categoryId) => searchProductNames(keyword, categoryId),
+    findCategoryByName,
     listCategories: () => getAll("categories"),
     listCustomers: () => getAll("customers"),
     listProducts: () => getAll("products"),
