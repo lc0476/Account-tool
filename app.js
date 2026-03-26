@@ -400,9 +400,8 @@
 
     function renderPreorderItem(item) {
       const isCustomerMode = state.preorderViewMode === "customer";
-      const priceInfo = "进" + formatMoney(item.preorder.costPrice) + " 售" + formatMoney(item.preorder.salePrice);
       const noteHtml = item.preorder.note
-        ? " <span class=\"item-note-inline\">(" + escapeHTML(item.preorder.note) + ")</span>"
+        ? "<span class=\"item-note-inline\">" + escapeHTML(item.preorder.note) + "</span>"
         : "";
       return (
         "<div class=\"swipe-row\" data-swipe-dir=\"left\" data-preorder-id=\"" + escapeHTML(item.preorder.id) + "\">" +
@@ -412,18 +411,15 @@
         (isCustomerMode
           ? "<div class=\"item-left\"><strong>" +
             escapeHTML((item.product && item.product.name) || "未知商品") +
-            "</strong> <span class=\"item-qty\">×" + escapeHTML(item.preorder.quantity) + "</span>" +
-            noteHtml + "</div>"
-          : "<div class=\"item-left\"><span>" +
+            "</strong><span class=\"item-qty\">×" + escapeHTML(item.preorder.quantity) + "</span></div>"
+          : "<div class=\"item-left\"><span class=\"item-name\">" +
             escapeHTML((item.customer && item.customer.name) || "未知客户") +
-            "</span> <span class=\"item-qty\">×" + escapeHTML(item.preorder.quantity) + "</span>" +
-            noteHtml + "</div>") +
+            "</span><span class=\"item-qty\">×" + escapeHTML(item.preorder.quantity) + "</span></div>") +
         "<div class=\"item-right\">" +
-        "<span class=\"item-price\">" + escapeHTML(priceInfo) + "</span>" +
-        "<div class=\"item-actions-inline\">" +
         "<button class=\"mini-btn ghost-btn js-edit-preorder\" data-id=\"" + escapeHTML(item.preorder.id) + "\">编辑</button>" +
         "<button class=\"mini-btn ghost-btn status-bought js-toggle-bought\" data-id=\"" + escapeHTML(item.preorder.id) + "\">买到</button>" +
-        "</div></div></div>" +
+        "</div></div>" +
+        (noteHtml ? "<div class=\"item-note-row\">" + noteHtml + "</div>" : "") +
         "</div>" +
         "</div>" +
         "<div class=\"swipe-action swipe-action-right js-delete-preorder\" data-id=\"" + escapeHTML(item.preorder.id) + "\">删除</div>" +
