@@ -2243,28 +2243,23 @@
     // 请求持久化存储，防止浏览器自动清理数据
     window.DB.requestPersistentStorage();
 
-    // 检测数据是否丢失，尝试从自动备份恢复
+    // 检测数据是否丢失，从云端恢复
     var empty = await window.DB.isDBEmpty();
     if (empty) {
-      var backup = window.DB.getAutoBackup();
-      if (backup) {
-        var ok = await customConfirm("检测到本地数据为空，但存在自动备份（" + backup.meta.exportedAt.slice(0, 16).replace("T", " ") + "），是否恢复？");
-        if (ok) {
-          try {
-            await window.DB.importAllData(backup);
-            showToast("数据已从自动备份恢复");
-          } catch (e) {
-            showToast("恢复失败：" + (e.message || "未知错误"));
-          }
+      var syncKey = window.DB.getSyncKey();
+      if (!syncKey) {
+        syncKey = await customPrompt("本地数据为空，请输入同步密钥从云端恢复");
+        if (syncKey && syncKey.length >= 4) {
+          window.DB.setSyncKey(syncKey);
         }
-      } else if (window.DB.getSyncKey()) {
+      }
+      if (window.DB.getSyncKey()) {
         try {
           var cloudData = await window.DB.cloudDownload();
-          showToast("正在从云端恢复数据...");
           await window.DB.importAllData(cloudData);
-          showToast("数据已从云端自动恢复");
+          showToast("数据已从云端恢复");
         } catch (e) {
-          // 云端也没有数据，忽略
+          showToast("未找到云端备份，请手动添加数据");
         }
       }
     }
