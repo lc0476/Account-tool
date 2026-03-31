@@ -56,7 +56,7 @@
             <button id="cloud-download-btn" class="side-nav-btn">从云端恢复</button>
           </div>
         </div>
-        <p class="side-menu-version">v1.6.0</p>
+        <p class="side-menu-version">v2.0.0</p>
       </aside>
 
       <main class="page-content">
@@ -97,22 +97,22 @@
         </section>
 
         <section class="tab-panel" id="tab-stats">
-          <div class="panel-toolbar two-cols">
-            <label>
-              开始日期
-              <input id="stats-start" type="date" />
-            </label>
-            <label>
-              结束日期
-              <input id="stats-end" type="date" />
-            </label>
+          <div style="display:flex;gap:0.3rem;align-items:stretch;flex-wrap:nowrap;margin-bottom:0.5rem">
+            <input id="stats-start" type="date" style="flex:1;min-width:0;width:0;font-size:12px;padding:0.4rem 0.15rem;height:2.2rem;box-sizing:border-box;-webkit-appearance:none;appearance:none;line-height:1.2" />
+            <input id="stats-end" type="date" style="flex:1;min-width:0;width:0;font-size:12px;padding:0.4rem 0.15rem;height:2.2rem;box-sizing:border-box;-webkit-appearance:none;appearance:none;line-height:1.2" />
+            <select id="stats-customer-filter" style="flex:1;min-width:0;width:0;font-size:12px;padding:0.4rem 0.15rem;height:2.2rem;box-sizing:border-box;line-height:1.2">
+              <option value="">全部</option>
+            </select>
           </div>
-          <button id="run-stats" class="primary-btn full">查询统计</button>
           <div id="stats-table-wrap" class="stats-table-wrap"></div>
-          <div class="summary-grid">
+          <div class="summary-grid summary-grid-4">
             <div class="summary-card">
               <span>总成本</span>
               <strong id="sum-cost">0.00</strong>
+            </div>
+            <div class="summary-card">
+              <span>总优惠</span>
+              <strong id="sum-discount">0.00</strong>
             </div>
             <div class="summary-card">
               <span>总收入</span>
@@ -232,14 +232,18 @@
           邮费
           <input id="billing-shipping-fee" type="number" min="0" step="0.01" value="0" />
         </label>
-        <div class="summary-grid">
+        <div class="summary-grid summary-grid-4">
           <div class="summary-card">
-            <span>总售价</span>
+            <span>售价</span>
             <strong id="billing-total-sale">0.00</strong>
           </div>
           <div class="summary-card">
-            <span>已付定金</span>
+            <span>定金</span>
             <input id="billing-total-cost" type="number" min="0" step="0.01" value="0" class="billing-summary-input" readonly />
+          </div>
+          <div class="summary-card">
+            <span>优惠</span>
+            <input id="billing-discount" type="number" min="0" step="0.01" value="0" class="billing-summary-input" />
           </div>
           <div class="summary-card">
             <span>待付</span>
@@ -312,17 +316,21 @@
           <button id="close-report-modal" class="icon-btn" aria-label="关闭报告">×</button>
           <h3 id="report-title">账单报告</h3>
         </div>
-        <div class="report-top">
+        <div class="report-top report-top-4">
           <div>
-            <div class="report-label">总售价（￥）</div>
+            <div class="report-label">售价</div>
             <div id="report-total-sale" class="report-number">0.00</div>
           </div>
           <div>
-            <div class="report-label">已付定金（￥）</div>
+            <div class="report-label">定金</div>
             <div id="report-total-cost" class="report-number">0.00</div>
           </div>
           <div>
-            <div class="report-label">待付（￥）</div>
+            <div class="report-label">优惠</div>
+            <div id="report-total-discount" class="report-number">0.00</div>
+          </div>
+          <div>
+            <div class="report-label">待付</div>
             <div id="report-total-profit" class="report-number">0.00</div>
           </div>
         </div>
@@ -341,6 +349,7 @@
           </table>
         </div>
         <div class="report-actions">
+          <button id="report-confirm-btn" class="primary-btn">确认</button>
           <button id="report-back-btn" class="ghost-btn">返回账单编辑</button>
         </div>
       </div>

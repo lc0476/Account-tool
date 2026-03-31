@@ -21,6 +21,8 @@
   const sumCost = document.getElementById("sum-cost");
   const sumIncome = document.getElementById("sum-income");
   const sumProfit = document.getElementById("sum-profit");
+  const sumDiscount = document.getElementById("sum-discount");
+  const statsCustomerFilter = document.getElementById("stats-customer-filter");
   const modeButtons = Array.from(document.querySelectorAll(".seg-btn"));
 
   const preorderModal = document.getElementById("preorder-modal");
@@ -61,7 +63,6 @@
   const fulfillmentSearchInput = document.getElementById("fulfillment-search");
   const fulfillmentSearchToggle = document.getElementById("fulfillment-search-toggle");
   const fulfillmentSortSelect = document.getElementById("fulfillment-sort");
-  const runStatsBtn = document.getElementById("run-stats");
 
   const productForm = document.getElementById("product-form");
   const productModal = document.getElementById("product-modal");
@@ -111,6 +112,7 @@
   const billingTotalCost = document.getElementById("billing-total-cost");
   const billingTotalSale = document.getElementById("billing-total-sale");
   const billingTotalProfit = document.getElementById("billing-total-profit");
+  const billingDiscount = document.getElementById("billing-discount");
   const generateBillingBtn = document.getElementById("generate-billing");
   const closeBillingModalBtn = document.getElementById("close-billing-modal");
   const billingPreview = document.getElementById("billing-preview");
@@ -120,8 +122,10 @@
   const reportTotalSale = document.getElementById("report-total-sale");
   const reportTotalCost = document.getElementById("report-total-cost");
   const reportTotalProfit = document.getElementById("report-total-profit");
+  const reportTotalDiscount = document.getElementById("report-total-discount");
   const reportRows = document.getElementById("report-rows");
   const reportBackBtn = document.getElementById("report-back-btn");
+  const reportConfirmBtn = document.getElementById("report-confirm-btn");
 
   const state = {
     activeTab: "preorders",
@@ -668,7 +672,8 @@
     totalSale += shipping;
     billingTotalSale.textContent = formatMoney(totalSale);
     billingTotalCost.value = formatMoney(totalDeposit);
-    billingTotalProfit.textContent = formatMoney(totalSale - totalDeposit);
+    var discount = numberOrZero(billingDiscount.value);
+    billingTotalProfit.textContent = formatMoney(totalSale - totalDeposit - discount);
   }
 
   function renderBillPreview() {
@@ -702,6 +707,8 @@
       billingTotalSale.textContent +
       "</div><div class=\"bill-extra\">已付定金：￥" +
       formatMoney(numberOrZero(billingTotalCost.value)) +
+      "</div><div class=\"bill-extra\">优惠：￥" +
+      formatMoney(numberOrZero(billingDiscount.value)) +
       "</div><div class=\"bill-total\">待付：￥" +
       billingTotalProfit.textContent +
       "</div></div>";
@@ -714,6 +721,7 @@
     reportTitle.textContent = state.billingDraft.customerName + " 的账单";
     reportTotalSale.textContent = billingTotalSale.textContent;
     reportTotalCost.textContent = formatMoney(numberOrZero(billingTotalCost.value));
+    reportTotalDiscount.textContent = formatMoney(numberOrZero(billingDiscount.value));
     reportTotalProfit.textContent = billingTotalProfit.textContent;
     reportRows.innerHTML = state.billingDraft.rows
       .map((row) => {
@@ -774,6 +782,7 @@
     billingTitle.textContent = customerName + " 的账单生成";
     billingShippingFee.value = "0";
     billingTotalCost.value = "0";
+    billingDiscount.value = "0";
     renderBillingRows();
     recalcBillingTotals();
     renderBillPreview();
@@ -783,10 +792,31 @@
   async function renderStats() {
     const keepPageY = state.activeTab === "stats" ? window.scrollY : 0;
     const keepInnerY = statsWrap ? statsWrap.scrollTop : 0;
-    const rows = await window.DB.getCompletedStats(statsStart.value, statsEnd.value);
+
+    // 更新买家筛选下拉
+    var customers = await window.DB.listCustomers();
+    var currentFilter = statsCustomerFilter.value;
+    statsCustomerFilter.innerHTML = "<option value=\"\">全部</option>" +
+      customers.sort(function (a, b) { return a.name.localeCompare(b.name, "zh-CN"); })
+        .map(function (c) { return "<option value=\"" + escapeHTML(c.id) + "\">" + escapeHTML(c.name) + "</option>"; })
+        .join("");
+    statsCustomerFilter.value = currentFilter;
+
+    var allRows = await window.DB.getCompletedStats(statsStart.value, statsEnd.value);
+    var selectedCustomer = statsCustomerFilter.value;
+    var selectedName = "";
+    if (selectedCustomer) {
+      var opt = statsCustomerFilter.selectedOptions[0];
+      selectedName = opt ? opt.textContent : "";
+    }
+    var rows = selectedCustomer
+      ? allRows.filter(function (r) { return r.customerId === selectedCustomer || r.customerName === selectedName; })
+      : allRows;
+
     if (!rows.length) {
       statsWrap.innerHTML = "<div class=\"empty-tip stats-empty\">当前区间暂无已完成交易。</div>";
       sumCost.textContent = "0.00";
+      sumDiscount.textContent = "0.00";
       sumIncome.textContent = "0.00";
       sumProfit.textContent = "0.00";
       if (state.activeTab === "stats") {
@@ -797,29 +827,29 @@
     }
     let totalCost = 0;
     let totalIncome = 0;
-    const tr = rows
+    let totalDiscount = 0;
+    const displayRows = rows.filter(function (row) { return row.productName !== "优惠减免"; });
+    rows.forEach(function (row) {
+      totalCost += row.totalCost;
+      totalIncome += row.totalIncome;
+      totalDiscount += row.discount;
+    });
+    const tr = displayRows
       .map((row) => {
-        totalCost += row.totalCost;
-        totalIncome += row.totalIncome;
         return (
           "<tr>" +
           "<td>" +
           escapeHTML(row.customerName) +
           "</td>" +
           "<td>" +
+          "<div style=\"max-width:6em;word-break:break-all;white-space:normal;line-height:1.3\">" +
           escapeHTML(row.productName) +
-          "</td>" +
+          "</div></td>" +
           "<td>" +
           escapeHTML(row.quantity) +
           "</td>" +
           "<td>" +
           formatMoney(row.costPrice) +
-          "</td>" +
-          "<td>" +
-          formatMoney(row.salePrice) +
-          "</td>" +
-          "<td>" +
-          formatMoney(row.totalCost) +
           "</td>" +
           "<td>" +
           formatMoney(row.totalIncome) +
@@ -832,12 +862,13 @@
       })
       .join("");
     statsWrap.innerHTML =
-      "<table class=\"stats-table\"><thead><tr><th>买家</th><th>商品</th><th>数量</th><th>进价</th><th>售价</th><th>成本</th><th>收入</th><th>完成日期</th></tr></thead><tbody>" +
+      "<table class=\"stats-table\"><thead><tr><th>买家</th><th>商品</th><th>数量</th><th>进价</th><th>收入</th><th>完成日期</th></tr></thead><tbody>" +
       tr +
       "</tbody></table>";
     sumCost.textContent = formatMoney(totalCost);
+    sumDiscount.textContent = formatMoney(totalDiscount);
     sumIncome.textContent = formatMoney(totalIncome);
-    sumProfit.textContent = formatMoney(totalIncome - totalCost);
+    sumProfit.textContent = formatMoney(totalIncome - totalCost - totalDiscount);
     if (state.activeTab === "stats") {
       window.scrollTo(0, keepPageY);
       statsWrap.scrollTop = keepInnerY;
@@ -917,10 +948,6 @@
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
         var displayCost = item.costPrice;
         var displaySale = item.salePrice;
-        if (productBatches.length > 1) {
-          displayCost = productBatches[0].costPrice;
-          displaySale = productBatches[0].salePrice;
-        }
         const batchListHTML = productBatches.length
           ? productBatches.map(function (b, idx) {
               var batchLabel = (idx + 1) + ", " + b.batchName;
@@ -1388,7 +1415,13 @@
       }
     }
 
-    preorderDoneBtn.addEventListener("click", () => {
+    preorderDoneBtn.addEventListener("click", async () => {
+      // 如果有填写内容，先保存再关闭
+      if (preorderCustomerInput.value.trim() && preorderProductInput.value.trim()) {
+        if (preorderForm.reportValidity()) {
+          await savePreorderAndContinue();
+        }
+      }
       preorderModal.close();
       state.addMode = "single";
     });
@@ -1768,22 +1801,18 @@
       renderBillPreview();
     });
 
-    generateBillingBtn.addEventListener("click", async () => {
+    billingDiscount.addEventListener("input", () => {
+      recalcBillingTotals();
+      renderBillPreview();
+    });
+
+    generateBillingBtn.addEventListener("click", () => {
       if (!state.billingDraft) {
         return;
       }
-      try {
-        await window.DB.saveCustomerBilling(state.billingDraft.customerId, {
-          rows: state.billingDraft.rows,
-          shippingFee: numberOrZero(billingShippingFee.value)
-        });
-        renderBillPreview();
-        renderReportPage();
-        await Promise.all([renderFulfillments(), renderStats(), renderPreorders()]);
-        showToast("账单数据已保存");
-      } catch (error) {
-        showToast(error.message || "保存账单失败");
-      }
+      state.billingDraft.discount = numberOrZero(billingDiscount.value);
+      renderBillPreview();
+      renderReportPage();
     });
 
     closeBillingModalBtn.addEventListener("click", () => {
@@ -1797,6 +1826,23 @@
       billingModal.showModal();
     });
 
+    reportConfirmBtn.addEventListener("click", async () => {
+      if (!state.billingDraft) return;
+      try {
+        await window.DB.saveCustomerBilling(state.billingDraft.customerId, {
+          rows: state.billingDraft.rows,
+          shippingFee: numberOrZero(billingShippingFee.value),
+          discount: numberOrZero(state.billingDraft.discount)
+        });
+        reportModal.close();
+        billingModal.close();
+        await Promise.all([renderFulfillments(), renderStats(), renderPreorders()]);
+        showToast("账单数据已保存");
+      } catch (error) {
+        showToast(error.message || "保存账单失败");
+      }
+    });
+
     productSearchInput.addEventListener("input", () => {
       renderProducts();
     });
@@ -1804,7 +1850,9 @@
       event.preventDefault();
     });
 
-    runStatsBtn.addEventListener("click", renderStats);
+    statsStart.addEventListener("change", renderStats);
+    statsEnd.addEventListener("change", renderStats);
+    statsCustomerFilter.addEventListener("change", renderStats);
 
     productForm.addEventListener("submit", async (event) => {
       event.preventDefault();

@@ -243,26 +243,19 @@
     const existing = await findByName("products", cleanName);
     if (existing) {
       const nextCost = Number(pricingInput && pricingInput.costPrice);
-      const nextSale = Number(pricingInput && pricingInput.salePrice);
       const beforeCost = Number(existing.costPrice) || 0;
-      const beforeSale = Number(existing.salePrice) || 0;
       if (!existing.categoryId && categoryId) {
         existing.categoryId = categoryId;
+        existing.updatedAt = nowISO();
+        await withTransaction(["products"], "readwrite", async (stores) => {
+          stores.products.put(existing);
+        });
       }
-      if (!Number.isNaN(nextCost) && nextCost > 0) {
-        existing.costPrice = nextCost;
-      }
-      if (!Number.isNaN(nextSale) && nextSale > 0) {
-        existing.salePrice = nextSale;
-      }
-      existing.updatedAt = nowISO();
-      await withTransaction(["products"], "readwrite", async (stores) => {
-        stores.products.put(existing);
-      });
       return {
         product: existing,
         existed: true,
-        costChanged: beforeCost !== (Number(existing.costPrice) || 0)
+        costChanged: !Number.isNaN(nextCost) && nextCost > 0 && beforeCost !== nextCost,
+        beforeCost: beforeCost
       };
     }
     const now = nowISO();
@@ -287,10 +280,11 @@
     });
   }
 
-  async function upsertBatchForProduct(product, qty) {
+  async function upsertBatchForProduct(product, qty, inputCost, inputSale) {
     const baseName = todayBatchName();
     const quantity = Number(qty) || 0;
-    const costPrice = Number(product.costPrice) || 0;
+    const costPrice = Number(inputCost) || Number(product.costPrice) || 0;
+    const salePrice = Number(inputSale) || Number(product.salePrice) || 0;
     const now = nowISO();
     return withTransaction(["productBatches"], "readwrite", async (stores) => {
       // 查找今天同商品的所有批次
@@ -301,7 +295,7 @@
       const sameCostBatch = todayBatches.find(function (b) { return (Number(b.costPrice) || 0) === costPrice; });
       if (sameCostBatch) {
         sameCostBatch.stock = Number(sameCostBatch.stock) + quantity;
-        sameCostBatch.salePrice = Number(product.salePrice) || 0;
+        sameCostBatch.salePrice = salePrice;
         sameCostBatch.updatedAt = now;
         stores.productBatches.put(sameCostBatch);
         return sameCostBatch;
@@ -321,7 +315,7 @@
         batchKey: batchKey,
         stock: quantity,
         costPrice: costPrice,
-        salePrice: Number(product.salePrice) || 0,
+        salePrice: salePrice,
         createdAt: now,
         updatedAt: now
       };
@@ -358,7 +352,7 @@
         batchKey,
         stock: 0,
         costPrice: Number(product.costPrice) || 0,
-        salePrice: Number(product.salePrice) || 0,
+        salePrice: salePrice,
         createdAt: now,
         updatedAt: now
       };
@@ -403,9 +397,13 @@
     const salePrice = Number(input.salePrice);
     const deposit = Number(input.deposit);
 
-    let batch = null;
-    if (productResult.existed && productResult.costChanged) {
-      batch = await upsertBatchForProduct(product, quantity);
+    var batch = null;
+    var defaultCost = Number(product.costPrice) || 0;
+    var defaultSale = Number(product.salePrice) || 0;
+    var inputCost = Number.isNaN(costPrice) ? defaultCost : costPrice;
+    var inputSale = Number.isNaN(salePrice) ? defaultSale : salePrice;
+    if (inputCost !== defaultCost || inputSale !== defaultSale) {
+      batch = await upsertBatchForProduct(product, quantity, inputCost, inputSale);
     }
 
     const preorder = {
@@ -589,6 +587,7 @@
               note: preorder.note || "",
               costPrice: Number(preorder.costPrice) || 0,
               salePrice: Number(preorder.salePrice) || 0,
+              discount: 0,
               shippedAt: record.shippedAt || now,
               createdAt: now
             });
@@ -637,7 +636,7 @@
     });
     const product = productResult.product;
     const now = nowISO();
-    return withTransaction(["preorders", "fulfillments"], "readwrite", async (stores) => {
+    var savedRecord = await withTransaction(["preorders", "fulfillments"], "readwrite", async (stores) => {
       const record = await requestToPromise(stores.preorders.get(preorderId));
       if (!record) {
         throw new Error("订单不存在");
@@ -661,6 +660,20 @@
       }
       return record;
     });
+
+    if (!savedRecord.batchId) {
+      await withTransaction(["products"], "readwrite", async (stores) => {
+        var prod = await requestToPromise(stores.products.get(product.id));
+        if (prod) {
+          prod.costPrice = Number(input.costPrice) || 0;
+          prod.salePrice = Number(input.salePrice) || 0;
+          prod.updatedAt = nowISO();
+          stores.products.put(prod);
+        }
+      });
+    }
+
+    return savedRecord;
   }
 
   async function deletePreorder(preorderId) {
@@ -728,12 +741,14 @@
         const salePrice = Number(h.salePrice) || 0;
         return {
           preorderId: h.id,
+          customerId: h.customerId,
           customerName: (customer && customer.name) || "未知客户",
           productName: h.productName || "未知商品",
           quantity: qty,
           costPrice,
           salePrice,
           deposit: 0,
+          discount: Number(h.discount) || 0,
           totalCost: qty * costPrice,
           totalIncome: qty * salePrice,
           completedAt: h.createdAt || h.shippedAt
@@ -747,8 +762,25 @@
     }
     const rows = Array.isArray(payload && payload.rows) ? payload.rows : [];
     const shippingFee = Number(payload && payload.shippingFee) || 0;
+    const discount = Number(payload && payload.discount) || 0;
+    const discountPerRow = rows.length > 0 ? Math.round(discount / rows.length * 100) / 100 : 0;
     const now = nowISO();
-    return withTransaction(["preorders", "fulfillments"], "readwrite", async (stores) => {
+    return withTransaction(["preorders", "fulfillments", "purchaseHistory"], "readwrite", async (stores) => {
+      // 如果有优惠，直接写一条优惠记录到 purchaseHistory
+      if (discount > 0 && customerId) {
+        stores.purchaseHistory.add({
+          id: uid(),
+          customerId: customerId,
+          productName: "优惠减免",
+          quantity: 1,
+          note: "",
+          costPrice: 0,
+          salePrice: 0,
+          discount: discount,
+          shippedAt: now,
+          createdAt: now
+        });
+      }
       for (const row of rows) {
         const preorder = await requestToPromise(stores.preorders.get(row.preorderId));
         const fulfillment = await requestToPromise(stores.fulfillments.get(row.fulfillmentId));
