@@ -573,36 +573,51 @@ summary {
 
 .stats-table th,
 .stats-table td {
+  white-space: nowrap;
+}
+
+.stats-table td:nth-child(2) {
   white-space: normal !important;
   word-break: break-all;
   overflow-wrap: break-word;
 }
 
+.stats-product-name {
+  max-width: 100%;
+  word-break: break-all;
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.stats-nowrap {
+  white-space: nowrap;
+}
+
 .stats-table th:nth-child(1),
 .stats-table td:nth-child(1) {
-  width: 16%;
+  width: 14%;
 }
 
 .stats-table th:nth-child(2),
 .stats-table td:nth-child(2) {
-  width: 24%;
+  width: 20%;
 }
 
 .stats-table th:nth-child(3),
 .stats-table td:nth-child(3) {
-  width: 10%;
+  width: 8%;
 }
 
 .stats-table th:nth-child(4),
 .stats-table td:nth-child(4),
 .stats-table th:nth-child(5),
 .stats-table td:nth-child(5) {
-  width: 14%;
+  width: 16%;
 }
 
 .stats-table th:nth-child(6),
 .stats-table td:nth-child(6) {
-  width: 22%;
+  width: 26%;
 }
 
 .stats-table th,

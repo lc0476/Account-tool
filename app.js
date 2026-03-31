@@ -837,26 +837,26 @@
     const tr = displayRows
       .map((row) => {
         return (
-          "<tr>" +
-          "<td>" +
+          "<tr data-history-id=\"" + escapeHTML(row.preorderId) + "\" style=\"cursor:pointer\">" +
+          "<td><span class=\"stats-nowrap\">" +
           escapeHTML(row.customerName) +
-          "</td>" +
+          "</span></td>" +
           "<td>" +
-          "<div style=\"max-width:6em;word-break:break-all;white-space:normal;line-height:1.3\">" +
+          "<div class=\"stats-product-name\">" +
           escapeHTML(row.productName) +
           "</div></td>" +
-          "<td>" +
+          "<td><span class=\"stats-nowrap\">" +
           escapeHTML(row.quantity) +
-          "</td>" +
-          "<td>" +
+          "</span></td>" +
+          "<td><span class=\"stats-nowrap\">" +
           formatMoney(row.costPrice) +
-          "</td>" +
-          "<td>" +
+          "</span></td>" +
+          "<td><span class=\"stats-nowrap\">" +
           formatMoney(row.totalIncome) +
-          "</td>" +
-          "<td>" +
+          "</span></td>" +
+          "<td><span class=\"stats-nowrap\">" +
           escapeHTML(formatDate(row.completedAt)) +
-          "</td>" +
+          "</span></td>" +
           "</tr>"
         );
       })
@@ -1853,6 +1853,71 @@
     statsStart.addEventListener("change", renderStats);
     statsEnd.addEventListener("change", renderStats);
     statsCustomerFilter.addEventListener("change", renderStats);
+
+    var statsEditModal = document.getElementById("stats-edit-modal");
+    var statsEditForm = document.getElementById("stats-edit-form");
+    var statsEditId = document.getElementById("stats-edit-id");
+    var statsEditCustomer = document.getElementById("stats-edit-customer");
+    var statsEditProduct = document.getElementById("stats-edit-product");
+    var statsEditQuantity = document.getElementById("stats-edit-quantity");
+    var statsEditCost = document.getElementById("stats-edit-cost");
+    var statsEditIncome = document.getElementById("stats-edit-income");
+    var statsEditDate = document.getElementById("stats-edit-date");
+
+    statsWrap.addEventListener("click", function (e) {
+      var tr = e.target.closest("tr[data-history-id]");
+      if (!tr) return;
+      var id = tr.getAttribute("data-history-id");
+      if (!id) return;
+      var cells = tr.querySelectorAll("td");
+      var curQty = Number(cells[2].textContent.trim()) || 1;
+      var curIncome = Number(cells[4].textContent.trim()) || 0;
+      statsEditId.value = id;
+      statsEditCustomer.value = cells[0].textContent.trim();
+      statsEditProduct.value = cells[1].textContent.trim();
+      statsEditQuantity.value = curQty;
+      statsEditCost.value = cells[3].textContent.trim();
+      statsEditIncome.value = cells[4].textContent.trim();
+      var dateText = cells[5].textContent.trim();
+      var dp = dateText.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+      statsEditDate.value = dp ? dp[1] + "-" + dp[2].padStart(2, "0") + "-" + dp[3].padStart(2, "0") : "";
+      statsEditModal.showModal();
+    });
+
+    document.getElementById("stats-edit-cancel").addEventListener("click", function () {
+      statsEditModal.close();
+    });
+
+    statsEditForm.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var id = statsEditId.value;
+      var qty = parseInt(statsEditQuantity.value, 10);
+      var cost = parseFloat(statsEditCost.value);
+      var income = parseFloat(statsEditIncome.value);
+      if (isNaN(qty) || qty <= 0) { showToast("数量必须为正整数"); return; }
+      if (isNaN(cost) || cost < 0) { showToast("进价不能为负数"); return; }
+      if (isNaN(income) || income < 0) { showToast("收入不能为负数"); return; }
+      var customer = statsEditCustomer.value.trim();
+      var product = statsEditProduct.value.trim();
+      var dateVal = statsEditDate.value;
+      if (!customer || !product || !dateVal) { showToast("所有字段不能为空"); return; }
+      try {
+        var d = new Date(dateVal + "T00:00:00");
+        await window.DB.updatePurchaseHistory(id, {
+          customerName: customer,
+          productName: product,
+          quantity: qty,
+          costPrice: cost,
+          salePrice: qty > 0 ? Math.round(income / qty * 100) / 100 : 0,
+          createdAt: d.toISOString()
+        });
+        statsEditModal.close();
+        showToast("记录已更新");
+        await renderStats();
+      } catch (err) {
+        showToast("更新失败: " + err.message);
+      }
+    });
 
     productForm.addEventListener("submit", async (event) => {
       event.preventDefault();

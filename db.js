@@ -949,6 +949,16 @@
     });
   }
 
+
+  async function updatePurchaseHistory(id, changes) {
+    return withTransaction(["purchaseHistory"], "readwrite", async (stores) => {
+      const record = await requestToPromise(stores.purchaseHistory.get(id));
+      if (!record) throw new Error("记录不存在");
+      Object.assign(record, changes, { updatedAt: nowISO() });
+      stores.purchaseHistory.put(record);
+      return record;
+    });
+  }
   async function removeBatch(id) {
     return withTransaction(["productBatches"], "readwrite", async (stores) => {
       stores.productBatches.delete(id);
@@ -1129,6 +1139,7 @@
     getPurchaseHistoryByCustomer,
     listPurchaseHistory,
     removePurchaseHistory,
+    updatePurchaseHistory,
     removeBatch,
     exportAllData,
     importAllData,
