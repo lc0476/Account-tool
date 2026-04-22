@@ -592,7 +592,10 @@
           escapeHTML(customerName) +
           "\">收款</button>" +
           "</summary>" +
-          "<div class=\"fulfillment-table-header\"><table class=\"fulfillment-table\"><thead><tr><th>商品</th><th>数量</th><th>已付</th><th>已发</th></tr></thead></table></div>" +
+          "<div class=\"fulfillment-table-header\"><table class=\"fulfillment-table\"><thead><tr><th>商品</th><th>数量</th><th>已付</th><th>已发<input type=\"checkbox\" class=\"js-batch-shipped\" data-customer=\"" +
+          escapeHTML(items[0].customer && items[0].customer.id) +
+          "\"" + (items.every(function(it) { return !!it.fulfillment.isShipped; }) ? " checked" : "") +
+          " title=\"全部标记已发\" style=\"margin-left:2px;width:1em;height:1em;vertical-align:middle\"></th></tr></thead></table></div>" +
           "<div class=\"swipe-list\">" +
           rows +
           "</div></details>"
@@ -656,6 +659,10 @@
         );
       })
       .join("");
+    var batchPaidCb = document.getElementById("billing-batch-paid");
+    if (batchPaidCb && state.billingDraft) {
+      batchPaidCb.checked = state.billingDraft.rows.every(function (r) { return !!r.isPaid; });
+    }
   }
 
   function recalcBillingTotals() {
@@ -1678,6 +1685,23 @@
       if (!(target instanceof HTMLElement)) {
         return;
       }
+      if (target.classList.contains("js-batch-shipped")) {
+        var card = target.closest(".fulfillment-customer-card");
+        if (!card) return;
+        var nextShipped = target.checked;
+        var btns = card.querySelectorAll(nextShipped ? ".js-toggle-shipped[data-next='1']" : ".js-toggle-shipped[data-next='0']");
+        if (!btns.length) { showToast(nextShipped ? "该客户已全部发货" : "该客户已全部未发"); return; }
+        try {
+          for (var k = 0; k < btns.length; k++) {
+            await window.DB.toggleFulfillmentShipped(btns[k].dataset.id, nextShipped);
+          }
+          await Promise.all([renderFulfillments(), renderCustomers(), renderStats()]);
+          showToast(nextShipped ? "已全部标记为已发" : "已全部标记为未发");
+        } catch (error) {
+          showToast(error.message || "批量操作失败");
+        }
+        return;
+      }
       if (target.classList.contains("js-toggle-paid")) {
         const id = target.dataset.id;
         const next = target.dataset.next === "1";
@@ -1802,6 +1826,15 @@
     });
 
     billingDiscount.addEventListener("input", () => {
+      recalcBillingTotals();
+      renderBillPreview();
+    });
+
+    document.getElementById("billing-batch-paid").addEventListener("change", function () {
+      if (!state.billingDraft) return;
+      var checked = this.checked;
+      state.billingDraft.rows.forEach(function (row) { row.isPaid = checked; });
+      renderBillingRows();
       recalcBillingTotals();
       renderBillPreview();
     });
