@@ -1063,15 +1063,25 @@
       }
     }
     console.log("[云端备份] 开始上传，密钥:", syncKey.slice(0, 2) + "****");
-    var resp = await fetch(CLOUD_URL, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", "X-Sync-Key": syncKey },
-      body: JSON.stringify(payload)
-    });
-    var result = await resp.json();
-    console.log("[云端备份] 服务器响应:", JSON.stringify(result));
-    if (!resp.ok) throw new Error(result.error || "上传失败");
-    return result;
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 15000);
+    try {
+      var resp = await fetch(CLOUD_URL, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-Sync-Key": syncKey },
+        body: JSON.stringify(payload),
+        cache: "no-store",
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      var result = await resp.json();
+      if (!resp.ok) throw new Error(result.error || "上传失败");
+      return result;
+    } catch (e) {
+      clearTimeout(timer);
+      if (e.name === "AbortError") throw new Error("上传超时，请检查网络");
+      throw e;
+    }
   }
 
   async function cloudDownload() {
@@ -1081,7 +1091,8 @@
     }
     var resp = await fetch(CLOUD_URL, {
       method: "GET",
-      headers: { "X-Sync-Key": syncKey }
+      headers: { "X-Sync-Key": syncKey },
+      cache: "no-store"
     });
     if (!resp.ok) {
       var err = await resp.json().catch(function () { return {}; });
