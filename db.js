@@ -1041,6 +1041,16 @@
       throw new Error("请先设置4位以上的同步密钥");
     }
     var payload = await exportAllData();
+    var tables = payload && payload.data;
+    if (tables) {
+      var hasData = false;
+      for (var k in tables) {
+        if (Array.isArray(tables[k]) && tables[k].length > 0) { hasData = true; break; }
+      }
+      if (!hasData) {
+        throw new Error("本地数据为空，已跳过上传以保护云端备份");
+      }
+    }
     var resp = await fetch(CLOUD_URL, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "X-Sync-Key": syncKey },
