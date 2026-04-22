@@ -1,4 +1,4 @@
-const CACHE_NAME = "daigou-accounting-v122";
+const CACHE_NAME = "daigou-accounting-v123";
 const ASSETS = ["./", "./index.html", "./styles.css", "./db.js", "./app.js", "./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", (event) => {
