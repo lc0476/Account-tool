@@ -1260,17 +1260,9 @@
 
     cloudUploadBtn.addEventListener("click", async () => {
       try {
-        var debugPayload = await window.DB.exportAllData();
-        var debugCounts = [];
-        if (debugPayload && debugPayload.data) {
-          for (var dk in debugPayload.data) {
-            var len = Array.isArray(debugPayload.data[dk]) ? debugPayload.data[dk].length : 0;
-            if (len > 0) debugCounts.push(dk + ":" + len);
-          }
-        }
-        showToast("导出数据: " + (debugCounts.length ? debugCounts.join(", ") : "全部为空"), 5000);
-        var result = await window.DB.cloudUpload();
-        showToast("上传成功! " + (result.versionId || ""), 5000);
+        showToast("正在上传...");
+        await window.DB.cloudUpload();
+        showToast("上传成功", 3000);
       } catch (error) {
         showToast("上传失败: " + error.message, 8000);
       }
