@@ -1,4 +1,4 @@
-const CACHE_NAME = "daigou-accounting-v123";
+const CACHE_NAME = "daigou-accounting-v124";
 const ASSETS = ["./", "./index.html", "./styles.css", "./db.js", "./app.js", "./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -26,6 +26,10 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  // 非同源请求（如 API 调用）直接走网络，不缓存
+  if (!event.request.url.startsWith(self.location.origin)) {
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
