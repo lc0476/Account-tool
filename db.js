@@ -1064,7 +1064,7 @@
     }
     console.log("[云端备份] 开始上传，密钥:", syncKey.slice(0, 2) + "****");
     var controller = new AbortController();
-    var timer = setTimeout(function () { controller.abort(); }, 15000);
+    var timer = setTimeout(function () { controller.abort(); }, 60000);
     try {
       var resp = await fetch(CLOUD_URL, {
         method: "PUT",
