@@ -1,4 +1,4 @@
-const CACHE_NAME = "daigou-accounting-v124";
+const CACHE_NAME = "daigou-accounting-v125";
 const ASSETS = ["./", "./index.html", "./styles.css", "./db.js", "./app.js", "./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -44,4 +44,10 @@ self.addEventListener("fetch", (event) => {
         .catch(() => caches.match("./index.html"));
     })
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });

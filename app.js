@@ -2380,7 +2380,20 @@
       return;
     }
     try {
-      await navigator.serviceWorker.register("./sw.js");
+      var reg = await navigator.serviceWorker.register("./sw.js");
+      if (reg.waiting) {
+        reg.waiting.postMessage({ type: "SKIP_WAITING" });
+      }
+      reg.addEventListener("updatefound", function () {
+        var newWorker = reg.installing;
+        if (newWorker) {
+          newWorker.addEventListener("statechange", function () {
+            if (newWorker.state === "activated") {
+              window.location.reload();
+            }
+          });
+        }
+      });
     } catch (error) {
       console.warn("service worker register failed:", error);
     }
