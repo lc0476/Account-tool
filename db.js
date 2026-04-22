@@ -1050,21 +1050,26 @@
     }
     var payload = await exportAllData();
     var tables = payload && payload.data;
+    var counts = {};
     if (tables) {
       var hasData = false;
       for (var k in tables) {
-        if (Array.isArray(tables[k]) && tables[k].length > 0) { hasData = true; break; }
+        counts[k] = Array.isArray(tables[k]) ? tables[k].length : 0;
+        if (counts[k] > 0) hasData = true;
       }
+      console.log("[云端备份] 导出数据统计:", JSON.stringify(counts));
       if (!hasData) {
         throw new Error("本地数据为空，已跳过上传以保护云端备份");
       }
     }
+    console.log("[云端备份] 开始上传，密钥:", syncKey.slice(0, 2) + "****");
     var resp = await fetch(CLOUD_URL, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "X-Sync-Key": syncKey },
       body: JSON.stringify(payload)
     });
     var result = await resp.json();
+    console.log("[云端备份] 服务器响应:", JSON.stringify(result));
     if (!resp.ok) throw new Error(result.error || "上传失败");
     return result;
   }
