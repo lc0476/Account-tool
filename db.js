@@ -985,18 +985,26 @@
     if (!payload || typeof payload !== "object" || !payload.data || typeof payload.data !== "object") {
       throw new Error("备份文件格式不正确");
     }
-    return withTransaction(STORE_NAMES, "readwrite", async (stores) => {
+    var totalRows = 0;
+    await withTransaction(STORE_NAMES, "readwrite", async (stores) => {
       for (const name of STORE_NAMES) {
         stores[name].clear();
       }
       for (const name of STORE_NAMES) {
         const rows = Array.isArray(payload.data[name]) ? payload.data[name] : [];
         rows.forEach((row) => {
-          stores[name].put(row);
+          if (row && typeof row === "object") {
+            if (!row.id) row.id = uid();
+            stores[name].put(row);
+            totalRows++;
+          }
         });
       }
-      return true;
     });
+    if (totalRows === 0) {
+      throw new Error("备份文件中没有有效数据");
+    }
+    return true;
   }
 
   var BACKUP_KEY = "daigou-auto-backup";
